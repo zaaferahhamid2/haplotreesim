@@ -9,8 +9,8 @@ This script verifies that the simulator can:
 5. Extract ground truth data
 """
 
-import sys
-sys.path.insert(0, '/home/claude/haplotreesim/src')
+## import sys
+## sys.path.insert(0, '/home/claude/haplotreesim/src')
 
 import numpy as np
 from haplotreesim import SimulationConfig, HaploTreeSimulator
