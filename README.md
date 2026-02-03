@@ -10,11 +10,11 @@ This repository contains the initial implementation of HaploTreeSim, a simulator
 
 The minimal simulator is now functional and produces diploid output (no CNAs yet). The following components are implemented:
 
-✅ **Repository Structure**: Clean Python package with `src/`, `tests/`, and `configs/` directories  
-✅ **Data Models**: Complete class definitions for bins, segments, clones, events, and cells  
-✅ **Simulator Core**: Basic simulator that outputs diploid read-count and allele-count matrices  
-✅ **Configuration System**: Flexible configuration using dataclasses  
-✅ **Test Suite**: Verification tests for Week 5 deliverable
+ yes - **Repository Structure**: Clean Python package with `src/`, `tests/`, and `configs/` directories  
+ yes - **Data Models**: Complete class definitions for bins, segments, clones, events, and cells  
+ yes - **Simulator Core**: Basic simulator that outputs diploid read-count and allele-count matrices  
+ yes - **Configuration System**: Flexible configuration using dataclasses  
+ yes - **Test Suite**: Verification tests for Week 5 deliverable
 
 ### Repository Structure
 
@@ -194,8 +194,3 @@ This simulator implements the models described in the HaploTreeSim paper (sectio
 
 ### License
 
-[To be determined]
-
-### Contact
-
-[Your contact information]
