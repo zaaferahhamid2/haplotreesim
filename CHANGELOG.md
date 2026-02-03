@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Non-trivial clone tree structure
 - Non-uniform clone frequencies
 
-## [0.1.0] - 2024-XX-XX
+## 2.2.25
 
 ### Added (Week 5 Deliverable)
 - Initial release of HaploTreeSim simulator
@@ -62,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Roadmap
 
-- **v0.1.0** (Week 5): Minimal diploid simulator ✅
+- **v0.1.0** (Week 5): Minimal diploid simulator 
 - **v0.2.0** (Week 10): CNA events and tree structure
 - **v0.3.0** (Week 15): Read mode with FASTQ generation
 - **v0.4.0** (Week 20): Benchmark tracks and metrics
