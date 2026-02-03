@@ -1,13 +1,11 @@
 # Contributing to HaploTreeSim
 
-Thank you for your interest in contributing to HaploTreeSim! This document provides guidelines for contributing to the project.
-
 ## Getting Started
 
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/haplotreesim.git
+   git clone https://github.com/USERNAME/haplotreesim.git
    cd haplotreesim
    ```
 3. **Create a branch** for your feature:
@@ -117,30 +115,12 @@ When reporting bugs or requesting features:
 
 ## Development Workflow
 
-### Week-by-Week Implementation
-
-This project follows a 28-week implementation plan. Check the current week's focus in the README or project board.
-
 ### Branch Naming
 
 - `feature/` - New features (e.g., `feature/week6-cna-events`)
 - `bugfix/` - Bug fixes (e.g., `bugfix/negative-binomial-overflow`)
 - `docs/` - Documentation updates
 - `test/` - Test additions/improvements
-
-### Commit Messages
-
-Use clear, imperative commit messages:
-
-✅ Good:
-- `Add WGD event generation to simulator`
-- `Fix allele count overflow in Beta-Binomial model`
-- `Update README with installation instructions`
-
-❌ Bad:
-- `Update code`
-- `Fixed bug`
-- `Changes`
 
 ## Code Review Process
 
@@ -159,4 +139,3 @@ Use clear, imperative commit messages:
 
 By contributing, you agree that your contributions will be licensed under the MIT License.
 
-Thank you for contributing to HaploTreeSim! 🧬
