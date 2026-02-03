@@ -7,8 +7,8 @@ This script demonstrates how to:
 3. Visualize basic statistics
 """
 
-import sys
-sys.path.insert(0, '/home/claude/haplotreesim/src')
+## import sys
+## sys.path.insert(0, '/home/claude/haplotreesim/src')
 
 import numpy as np
 from haplotreesim import SimulationConfig, HaploTreeSimulator
