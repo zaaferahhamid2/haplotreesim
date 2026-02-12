@@ -1,8 +1,5 @@
 """
 HaploTreeSim: A Controlled, End-to-End Benchmark for Low-Pass scDNA-seq
-
-A simulator and benchmark suite that generates synthetic scDNA-seq datasets 
-under explicit haplotype-specific CNA evolution on a ground-truth clone tree.
 """
 
 __version__ = "0.1.0"
@@ -14,10 +11,13 @@ from .data_models import (
     CNAEvent,
     Clone,
     Cell,
-    SimulationConfig
+    SimulationConfig,
+    Haplotype,
 )
 
 from .simulator import HaploTreeSimulator
+from .event_generator import EventGenerator
+from .event_applier import EventApplier
 
 __all__ = [
     "Bin",
@@ -27,5 +27,8 @@ __all__ = [
     "Clone",
     "Cell",
     "SimulationConfig",
+    "Haplotype",
     "HaploTreeSimulator",
+    "EventGenerator",
+    "EventApplier",
 ]
