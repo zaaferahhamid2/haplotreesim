@@ -136,13 +136,16 @@ class HaploTreeSimulator:
         """
         Generate clone tree with haplotype-specific copy number profiles.
         
-        For Week 5 deliverable: creates a single root clone with diploid CN
-        (no CNAs applied yet).
+        Week 6: Now applies CNA events to create diverse clones.
         """
+        from .event_generator import EventGenerator
+        from .event_applier import EventApplier
+        from .tree_builder import TreeBuilder
+        
         # Get root copy number
         cn_A_init, cn_B_init = self.config.get_root_cn()
         
-        # Create root clone (diploid across all bins)
+        # Create root clone (diploid or WGD)
         root_cn_A = np.full(self.config.num_bins, cn_A_init, dtype=int)
         root_cn_B = np.full(self.config.num_bins, cn_B_init, dtype=int)
         
@@ -156,21 +159,56 @@ class HaploTreeSimulator:
         )
         self.clones = [root_clone]
         
-        # TODO (future weeks): Generate tree structure and apply CNA events
-        # For now, just create additional clones as copies of root
-        for k in range(1, self.config.num_clones):
-            clone = Clone(
-                index=k,
-                parent_index=0,  # All children of root for now
-                cn_profile_A=root_cn_A.copy(),
-                cn_profile_B=root_cn_B.copy(),
-                events=[],
+        # Build tree structure
+        tree_builder = TreeBuilder(self.rng, self.config.num_clones)
+        tree = tree_builder.build_tree(tree_type="star")  # Star tree for now
+        
+        # Initialize event generator and applier
+        event_generator = EventGenerator(
+            rng=self.rng,
+            num_bins=self.config.num_bins,
+            lambda_events=self.config.lambda_events,
+            lambda_amplitude=self.config.lambda_amplitude,
+            prob_wgd=self.config.prob_wgd,
+            focal_prob=self.config.focal_prob,
+            arm_prob=self.config.arm_prob,
+            chrom_prob=self.config.chrom_prob,
+            focal_size_mean=self.config.focal_size_mean,
+            arm_size_mean=self.config.arm_size_mean,
+            gain_prob=self.config.gain_prob,
+        )
+        
+        event_applier = EventApplier(max_copy_number=self.config.max_copy_number)
+        
+        # Generate clones following tree structure
+        for clone_id in range(1, self.config.num_clones):
+            parent_id = tree[clone_id]
+            parent_clone = self.clones[parent_id]
+            
+            # Generate events for this edge
+            # Allow WGD only on edges from root (early WGD)
+            allow_wgd = (parent_id == 0 and self.config.prob_wgd > 0)
+            events = event_generator.generate_events_for_edge(allow_wgd=allow_wgd)
+            
+            # Apply events to parent profile
+            cn_A, cn_B = event_applier.apply_events(parent_clone, events)
+            
+            # Create child clone
+            child_clone = Clone(
+                index=clone_id,
+                parent_index=parent_id,
+                cn_profile_A=cn_A,
+                cn_profile_B=cn_B,
+                events=events,
                 is_root=False
             )
-            self.clones.append(clone)
+            self.clones.append(child_clone)
         
-        print(f"  Created {len(self.clones)} clones (all diploid for now)")
-    
+        print(f"  Created {len(self.clones)} clones with CNA events")
+        
+        # Print summary of events
+        total_events = sum(len(clone.events) for clone in self.clones)
+        print(f"  Total CNA events: {total_events}")
     def _sample_cells(self):
         """
         Sample cells from clones with optional normal/doublet contamination.
