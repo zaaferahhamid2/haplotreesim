@@ -46,3 +46,4 @@ my_test.py
 large_sim.py
 understand_simulation.py
 read_counts.npy
+*.temp
