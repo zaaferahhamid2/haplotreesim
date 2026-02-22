@@ -1,0 +1,130 @@
+{
+  "num_clones": 5,
+  "clone_tree": {
+    "0": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "clones": [
+    {
+      "clone_id": 0,
+      "parent_id": null,
+      "is_root": true,
+      "num_events": 0,
+      "events": []
+    },
+    {
+      "clone_id": 1,
+      "parent_id": 0,
+      "is_root": false,
+      "num_events": 4,
+      "events": [
+        {
+          "start": 0,
+          "end": 499,
+          "haplotype": "B",
+          "amplitude": 2
+        },
+        {
+          "start": 333,
+          "end": 395,
+          "haplotype": "A",
+          "amplitude": -2
+        },
+        {
+          "start": 364,
+          "end": 421,
+          "haplotype": "A",
+          "amplitude": -1
+        },
+        {
+          "start": 0,
+          "end": 499,
+          "haplotype": "B",
+          "amplitude": 2
+        }
+      ]
+    },
+    {
+      "clone_id": 2,
+      "parent_id": 0,
+      "is_root": false,
+      "num_events": 4,
+      "events": [
+        {
+          "start": 314,
+          "end": 356,
+          "haplotype": "A",
+          "amplitude": -1
+        },
+        {
+          "start": 43,
+          "end": 100,
+          "haplotype": "A",
+          "amplitude": 3
+        },
+        {
+          "start": 370,
+          "end": 410,
+          "haplotype": "A",
+          "amplitude": 4
+        },
+        {
+          "start": 202,
+          "end": 242,
+          "haplotype": "B",
+          "amplitude": -2
+        }
+      ]
+    },
+    {
+      "clone_id": 3,
+      "parent_id": 0,
+      "is_root": false,
+      "num_events": 3,
+      "events": [
+        {
+          "start": 124,
+          "end": 172,
+          "haplotype": "A",
+          "amplitude": 2
+        },
+        {
+          "start": 57,
+          "end": 101,
+          "haplotype": "B",
+          "amplitude": -3
+        },
+        {
+          "start": 319,
+          "end": 373,
+          "haplotype": "A",
+          "amplitude": -2
+        }
+      ]
+    },
+    {
+      "clone_id": 4,
+      "parent_id": 0,
+      "is_root": false,
+      "num_events": 2,
+      "events": [
+        {
+          "start": 155,
+          "end": 201,
+          "haplotype": "A",
+          "amplitude": -4
+        },
+        {
+          "start": 0,
+          "end": 499,
+          "haplotype": "B",
+          "amplitude": -1
+        }
+      ]
+    }
+  ]
+}
