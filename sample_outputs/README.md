@@ -17,3 +17,22 @@ Example outputs from HaploTreeSim v0.2.0.
 - Cells: 100
 - Total CNA events: 13
 - Random seed: 42
+
+## Visualizations
+
+### CN Profiles Plot
+![CN Profiles](cn_profiles.png)
+
+Shows haplotype-specific copy number profiles for all 5 clones.
+
+### Tree Structure Diagram
+![Tree Structure](tree_structure.png)
+
+Shows the clone tree with parent-child relationships and event counts.
+
+## Regenerating Plots
+
+To recreate the plots:
+```bash
+python create_plots.py
+```
