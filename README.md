@@ -170,9 +170,9 @@ mean_allelic_coverage: float = 50.0  # Mean allelic depth β_n
 nu_a: float = 20.0                 # Beta-Binomial concentration
 ```
 
-### Next Steps (Week 6)
+### Week 6
 
-The following features will be implemented in Week 6:
+The following features are implemented in Week 6:
 
 - [ ] Segment boundary detection from CNA breakpoints
 - [ ] CNA event generation (gains, losses)
