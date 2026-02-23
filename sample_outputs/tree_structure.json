@@ -1,5 +1,6 @@
 {
   "num_clones": 5,
+  "num_segments": 18,
   "clone_tree": {
     "0": [
       1,
