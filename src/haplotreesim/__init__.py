@@ -2,7 +2,7 @@
 HaploTreeSim: A Controlled, End-to-End Benchmark for Low-Pass scDNA-seq
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from .data_models import (
     Bin,
@@ -19,6 +19,7 @@ from .simulator import HaploTreeSimulator
 from .event_generator import EventGenerator
 from .event_applier import EventApplier
 from .tree_builder import TreeBuilder
+from .segment_detector import SegmentDetector
 
 __all__ = [
     "Bin",
@@ -33,4 +34,5 @@ __all__ = [
     "EventGenerator",
     "EventApplier",
     "TreeBuilder",
+    "SegmentDetector",
 ]

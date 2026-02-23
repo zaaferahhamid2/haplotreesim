@@ -69,6 +69,9 @@ class HaploTreeSimulator:
         
         print(f"Generating clone tree with {self.config.num_clones} clones...")
         self._generate_clone_tree()
+
+        print("Detecting segments from CNA breakpoints...")
+        self._detect_segments_from_clones()
         
         print(f"Sampling {self.config.num_cells} cells...")
         self._sample_cells()
@@ -362,8 +365,8 @@ class HaploTreeSimulator:
                     p_alt = 1.0 - p_alt
                 
                 # Beta-Binomial: sample q ~ Beta(p*ν, (1-p)*ν), then a ~ Binomial(t, q)
-                alpha_beta = p_alt * self.config.nu_a
-                beta_beta = (1.0 - p_alt) * self.config.nu_a
+                alpha_beta = max(0.1, p_alt * self.config.nu_a)  # Ensure positive
+                beta_beta = max(0.1, (1.0 - p_alt) * self.config.nu_a)  # Ensure positive
                 
                 q = self.rng.beta(alpha_beta, beta_beta)
                 a_ns = self.rng.binomial(t_ns, q)
@@ -382,6 +385,38 @@ class HaploTreeSimulator:
         
         return alternate_counts, reference_counts, total_counts
     
+
+    def _detect_segments_from_clones(self):
+        """
+        Detect segment boundaries from clone CN profiles.
+        
+        This is called AFTER clone generation, so segments reflect
+        the actual CNA breakpoints.
+        """
+        from .segment_detector import SegmentDetector
+        
+        detector = SegmentDetector(num_bins=self.config.num_bins)
+        self.segments = detector.detect_segments(self.clones)
+        
+        # Update bin_to_segment mapping
+        self.bin_to_segment = {}
+        for segment in self.segments:
+            for bin_idx in segment.bin_indices:
+                self.bin_to_segment[bin_idx] = segment.index
+        
+        # Create one haplotype block per segment (for now)
+        self.haplotype_blocks = []
+        for i, segment in enumerate(self.segments):
+            segment.haplotype_block = i
+            hap_block = HaplotypeBlock(
+                index=i,
+                segment_indices=[segment.index],
+                orientation=1,
+                alternate_haplotype=Haplotype.A
+            )
+            self.haplotype_blocks.append(hap_block)
+            self.segment_to_block[segment.index] = i
+
     def get_ground_truth(self) -> Dict:
         """
         Extract ground truth data for evaluation.
