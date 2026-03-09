@@ -139,16 +139,33 @@ class HaploTreeSimulator:
         """
         Generate clone tree with haplotype-specific copy number profiles.
         
-        Week 6: Now applies CNA events to create diverse clones.
+        Updated: Now uses Beta-splitting tree model (Section 3.2).
         """
         from .event_generator import EventGenerator
         from .event_applier import EventApplier
-        from .tree_builder import TreeBuilder
+        from .beta_tree_builder import BetaSplittingTreeBuilder
+        
+        print(f"  Building Beta-splitting tree (α={self.config.alpha_tree}, β={self.config.beta_tree})...")
+        
+        # Build Beta-splitting tree
+        tree_builder = BetaSplittingTreeBuilder(
+            rng=self.rng,
+            num_clones=self.config.num_clones,
+            alpha_tree=self.config.alpha_tree,
+            beta_tree=self.config.beta_tree
+        )
+        
+        tree_nodes, parent_map = tree_builder.build_tree()
+        clone_proportions = tree_builder.get_clone_proportions(tree_nodes)
+        
+        # Store for later use in cell sampling
+        self._clone_proportions = clone_proportions
+        self._tree_nodes = tree_nodes
         
         # Get root copy number
         cn_A_init, cn_B_init = self.config.get_root_cn()
         
-        # Create root clone (diploid or WGD)
+        # Create root clone
         root_cn_A = np.full(self.config.num_bins, cn_A_init, dtype=int)
         root_cn_B = np.full(self.config.num_bins, cn_B_init, dtype=int)
         
@@ -160,11 +177,11 @@ class HaploTreeSimulator:
             events=[],
             is_root=True
         )
-        self.clones = [root_clone]
         
-        # Build tree structure
-        tree_builder = TreeBuilder(self.rng, self.config.num_clones)
-        tree = tree_builder.build_tree(tree_type="star")  # Star tree for now
+        # Map tree nodes to clones (only leaves become clones)
+        node_id_to_clone_idx = {}
+        self.clones = [root_clone]
+        node_id_to_clone_idx[0] = 0
         
         # Initialize event generator and applier
         event_generator = EventGenerator(
@@ -183,54 +200,105 @@ class HaploTreeSimulator:
         
         event_applier = EventApplier(max_copy_number=self.config.max_copy_number)
         
-        # Generate clones following tree structure
-        for clone_id in range(1, self.config.num_clones):
-            parent_id = tree[clone_id]
-            parent_clone = self.clones[parent_id]
+        # Process tree nodes in breadth-first order
+        # Build clones for all nodes (not just leaves)
+        nodes_by_id = {node.node_id: node for node in tree_nodes}
+        
+        # Process nodes in order of node_id (ensures parents before children)
+        for node in sorted(tree_nodes, key=lambda n: n.node_id):
+            if node.node_id == 0:
+                continue  # Root already created
+            
+            parent_node = nodes_by_id[node.parent_id]
+            parent_clone = self.clones[node_id_to_clone_idx[parent_node.node_id]]
             
             # Generate events for this edge
-            # Allow WGD only on edges from root (early WGD)
-            allow_wgd = (parent_id == 0 and self.config.prob_wgd > 0)
-            events = event_generator.generate_events_for_edge(allow_wgd=allow_wgd)
+            # Equation (18): M_v ~ 1 + Poisson(λ_E * τ_v)
+            # Events tied to branch length!
+            num_events = 1 + self.rng.poisson(self.config.lambda_events * node.edge_length)
             
-            # Apply events to parent profile
+            # Allow WGD only on edges from root
+            allow_wgd = (node.parent_id == 0 and self.config.prob_wgd > 0)
+            
+            # Generate events
+            events = []
+            for _ in range(num_events):
+                if allow_wgd and self.rng.random() < self.config.prob_wgd and len(events) == 0:
+                    # WGD event (only one per edge, applied first)
+                    from .data_models import CNAEvent, Haplotype
+                    wgd = CNAEvent(
+                        start_bin=0,
+                        end_bin=self.config.num_bins - 1,
+                        haplotype=Haplotype.WGD,
+                        amplitude=0
+                    )
+                    events.append(wgd)
+                else:
+                    event = event_generator._generate_single_event()
+                    events.append(event)
+            
+            # Apply events to get child CN profile
             cn_A, cn_B = event_applier.apply_events(parent_clone, events)
             
-            # Create child clone
+            # Create clone for this node
             child_clone = Clone(
-                index=clone_id,
-                parent_index=parent_id,
+                index=len(self.clones),
+                parent_index=node_id_to_clone_idx[parent_node.node_id],
                 cn_profile_A=cn_A,
                 cn_profile_B=cn_B,
                 events=events,
                 is_root=False
             )
+            
             self.clones.append(child_clone)
+            node_id_to_clone_idx[node.node_id] = child_clone.index
         
-        print(f"  Created {len(self.clones)} clones with CNA events")
+        # Map leaf nodes to final clone indices for sampling
+        leaf_nodes = [n for n in tree_nodes if n.is_leaf]
+        self._leaf_clone_indices = [node_id_to_clone_idx[n.node_id] for n in sorted(leaf_nodes, key=lambda n: n.node_id)]
         
-        # Print summary of events
         total_events = sum(len(clone.events) for clone in self.clones)
+        num_leaves = len(leaf_nodes)
+        
+        print(f"  Created {len(self.clones)} clones ({num_leaves} leaves)")
         print(f"  Total CNA events: {total_events}")
+        print(f"  Clone proportions: {clone_proportions}")
+
     def _sample_cells(self):
         """
         Sample cells from clones with optional normal/doublet contamination.
         
         For Week 5: uniform sampling from clones, no contamination.
         """
-        # Compute clone frequencies (uniform for now)
-        clone_frequencies = np.ones(self.config.num_clones) / self.config.num_clones
+        # Use clone frequencies from Beta-splitting tree
+        # Only sample from leaf clones (extant clones)
+        if hasattr(self, '_clone_proportions'):
+            clone_frequencies = self._clone_proportions
+        else:
+            # Fallback to uniform (shouldn't happen)
+            clone_frequencies = np.ones(self.config.num_clones) / self.config.num_clones
         
         # Sample library sizes and allelic coverage factors
         library_sizes = self._sample_library_sizes(self.config.num_cells)
         allelic_coverages = self._sample_allelic_coverages(self.config.num_cells)
         
-        # Assign cells to clones
-        clone_assignments = self.rng.choice(
-            self.config.num_clones,
-            size=self.config.num_cells,
-            p=clone_frequencies
-        )
+        # Assign cells to leaf clones only
+        if hasattr(self, '_leaf_clone_indices'):
+            # Sample from leaf clones using Beta-splitting proportions
+            leaf_indices = self.rng.choice(
+                len(self._leaf_clone_indices),
+                size=self.config.num_cells,
+                p=clone_frequencies
+            )
+            # Map to actual clone indices
+            clone_assignments = np.array([self._leaf_clone_indices[i] for i in leaf_indices])
+        else:
+            # Fallback
+            clone_assignments = self.rng.choice(
+                self.config.num_clones,
+                size=self.config.num_cells,
+                p=clone_frequencies
+            )
         
         # Create cell objects
         self.cells = []
