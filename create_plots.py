@@ -13,10 +13,14 @@ print("Creating CN profile plots...")
 with open('sample_outputs/tree_structure.json', 'r') as f:
     tree = json.load(f)
 
-# Create figure with subplots
-fig, axes = plt.subplots(5, 1, figsize=(14, 12))
+num_clones = tree['num_clones']
 
-for i in range(5):
+# Create figure with subplots (one per clone)
+fig, axes = plt.subplots(num_clones, 1, figsize=(14, 3*num_clones))
+if num_clones == 1:
+    axes = [axes]
+
+for i in range(num_clones):
     # Load CN profile
     cn = np.loadtxt(f'sample_outputs/clone_{i}_cn_profile.csv', 
                     delimiter=',', skiprows=1)
@@ -37,63 +41,109 @@ for i in range(5):
     ax.legend(loc='upper right', fontsize=9)
     ax.grid(True, alpha=0.3)
     
-    # Title with event info
+    # Title with clone info
     clone_info = tree['clones'][i]
     parent_str = f"parent: {clone_info['parent_id']}" if clone_info['parent_id'] is not None else "root"
-    ax.set_title(f"Clone {i} ({parent_str}, {clone_info['num_events']} events)", 
-                 fontsize=12, fontweight='bold')
+    leaf_str = " [LEAF]" if clone_info['is_leaf'] else ""
+    ax.set_title(f"Clone {i} ({parent_str}, {clone_info['num_events']} events){leaf_str}", 
+                 fontsize=11, fontweight='bold')
     
-    if i == 4:
+    if i == num_clones - 1:
         ax.set_xlabel('Genomic Bin', fontsize=11)
 
 plt.tight_layout()
 plt.savefig('sample_outputs/cn_profiles.png', dpi=150, bbox_inches='tight')
 print("✓ Saved: sample_outputs/cn_profiles.png")
 
-# Create tree diagram
+# Create tree diagram (more sophisticated layout for binary tree)
 print("\nCreating tree structure diagram...")
 
-fig, ax = plt.subplots(figsize=(10, 8))
+fig, ax = plt.subplots(figsize=(12, 10))
 
-# Simple tree layout
-positions = {
-    0: (0.5, 0.9),   # Root at top
-    1: (0.2, 0.6),   # Children spread out
-    2: (0.4, 0.6),
-    3: (0.6, 0.6),
-    4: (0.8, 0.6)
-}
+# Build tree structure from parent relationships
+def build_layout(tree_data):
+    """Create a hierarchical layout for the tree."""
+    # Get depth for each node
+    depths = {}
+    for clone in tree_data['clones']:
+        cid = clone['clone_id']
+        depth = 0
+        current = clone
+        while current['parent_id'] is not None:
+            depth += 1
+            parent_id = current['parent_id']
+            current = tree_data['clones'][parent_id]
+        depths[cid] = depth
+    
+    max_depth = max(depths.values())
+    
+    # Group nodes by depth
+    nodes_by_depth = {}
+    for cid, depth in depths.items():
+        if depth not in nodes_by_depth:
+            nodes_by_depth[depth] = []
+        nodes_by_depth[depth].append(cid)
+    
+    # Assign positions
+    positions = {}
+    y_spacing = 0.8 / (max_depth + 1) if max_depth > 0 else 0.5
+    
+    for depth in range(max_depth + 1):
+        nodes = sorted(nodes_by_depth[depth])
+        y = 0.9 - depth * y_spacing
+        
+        # Distribute nodes evenly at this depth
+        n = len(nodes)
+        if n == 1:
+            x_positions = [0.5]
+        else:
+            x_positions = np.linspace(0.1, 0.9, n)
+        
+        for i, cid in enumerate(nodes):
+            positions[cid] = (x_positions[i], y)
+    
+    return positions
+
+positions = build_layout(tree)
 
 # Draw edges
-for clone_info in tree['clones']:
-    if clone_info['parent_id'] is not None:
-        parent_id = clone_info['parent_id']
-        child_id = clone_info['clone_id']
+for clone in tree['clones']:
+    if clone['parent_id'] is not None:
+        parent_id = clone['parent_id']
+        child_id = clone['clone_id']
         x1, y1 = positions[parent_id]
         x2, y2 = positions[child_id]
         ax.plot([x1, x2], [y1, y2], 'k-', linewidth=2, alpha=0.5)
 
 # Draw nodes
-for clone_info in tree['clones']:
-    clone_id = clone_info['clone_id']
+for clone in tree['clones']:
+    clone_id = clone['clone_id']
     x, y = positions[clone_id]
     
-    # Color
-    color = 'lightgreen' if clone_info['is_root'] else 'lightblue'
+    # Color based on root or leaf
+    if clone['is_root']:
+        color = 'lightgreen'
+    elif clone['is_leaf']:
+        color = 'lightblue'
+    else:
+        color = 'lightgray'
     
-    # Circle
-    circle = plt.Circle((x, y), 0.05, color=color, ec='black', linewidth=2, zorder=10)
+    # Draw circle
+    circle = plt.Circle((x, y), 0.04, color=color, ec='black', linewidth=2, zorder=10)
     ax.add_patch(circle)
     
-    # Label
-    label = f"C{clone_id}\n{clone_info['num_events']} evt"
-    ax.text(x, y, label, ha='center', va='center', fontsize=10, fontweight='bold', zorder=11)
+    # Add label
+    label = f"C{clone_id}\n{clone['num_events']} evt"
+    ax.text(x, y, label, ha='center', va='center', fontsize=9, fontweight='bold', zorder=11)
 
 ax.set_xlim(0, 1)
-ax.set_ylim(0.3, 1.0)
+ax.set_ylim(0, 1.0)
 ax.axis('off')
-ax.set_title('Clone Tree Structure\n(green=root, blue=derived clones)', 
-             fontsize=14, fontweight='bold', pad=20)
+
+title = f"Beta-Splitting Clone Tree\n"
+title += f"(green=root, blue=leaves, gray=internal)\n"
+title += f"{tree['num_leaves']} leaves, {tree['num_clones']} total nodes"
+ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
 
 plt.tight_layout()
 plt.savefig('sample_outputs/tree_structure.png', dpi=150, bbox_inches='tight')
