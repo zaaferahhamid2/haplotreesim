@@ -285,7 +285,11 @@ class SimulationConfig:
     # Clone tree and states (Section 3.2)
     num_clones: int = 5  # K in paper
     max_copy_number: int = 8  # C_max in paper
-    root_type: str = "diploid"  # "diploid" or "wgd" - root initialization
+    root_type: str = "diploid"
+    
+    # Beta-splitting tree parameters (Section 3.2)
+    alpha_tree: float = 0.5  # Beta distribution α parameter (controls balance)
+    beta_tree: float = 0.3   # Beta distribution β parameter (smaller = more imbalanced)  # "diploid" or "wgd" - root initialization
     
     # CNA event model (Section 3.3)
     lambda_events: float = 1.5  # λ_E: mean number of events per edge
