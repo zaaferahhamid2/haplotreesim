@@ -1,0 +1,257 @@
+======================================================================
+Manual Verification of Overlapping CNA Events
+======================================================================
+
+Configuration:
+  Bins: 300
+  Clones (leaves): 3
+  Root CN: diploid (1, 1)
+Initializing genome...
+  Created 300 bins, 1 segments, 1 haplotype blocks
+Generating clone tree with 3 clones...
+  Building Beta-splitting tree (α=0.5, β=0.5)...
+  Created 5 clones (3 leaves)
+  Total CNA events: 5
+  Clone proportions: [0.5069376  0.40992065 0.08314175]
+Detecting segments from CNA breakpoints...
+  Detected 9 segments from 10 breakpoints
+Sampling 50 cells...
+  Sampled 50 cells
+  Clone distribution: [ 0 31  0 15  4]
+Generating read-depth observations...
+Generating allelic observations...
+Simulation complete!
+
+======================================================================
+TREE STRUCTURE
+======================================================================
+
+Clone 0: ROOT [INTERNAL]
+  Events on edge: 0
+
+Clone 1: parent=0 [LEAF]
+  Events on edge: 1
+
+Clone 2: parent=0 [INTERNAL]
+  Events on edge: 1
+
+Clone 3: parent=2 [LEAF]
+  Events on edge: 2
+
+Clone 4: parent=2 [LEAF]
+  Events on edge: 1
+
+======================================================================
+DETAILED EVENT TRACE (Root → Leaves)
+======================================================================
+
+======================================================================
+LEAF CLONE 1: Path from root: 0 → 1
+======================================================================
+
+Initial state (Root, Clone 0):
+  All bins: CN_A = 1, CN_B = 1 (diploid)
+
+----------------------------------------------------------------------
+Edge: Clone 0 → Clone 1
+----------------------------------------------------------------------
+  Events on this edge: 1
+
+  Event 1:
+    Type: B
+    Bins: [0, 299] (length: 300)
+    Amplitude: +3
+    Effect: CN change of +3 on haplotype B
+
+  Example bin changes:
+    Bin 0:
+      Before: CN_A=1, CN_B=1, Total=2
+      After:  CN_A=1, CN_B=4, Total=5
+      Change: ΔCN_A=+0, ΔCN_B=+3
+    Bin 149:
+      Before: CN_A=1, CN_B=1, Total=2
+      After:  CN_A=1, CN_B=4, Total=5
+      Change: ΔCN_A=+0, ΔCN_B=+3
+
+======================================================================
+FINAL STATE for Leaf Clone 1:
+======================================================================
+  Unique total CN values: 1
+  CN range: 5 to 5
+
+  Sample bins (first 10):
+    Bin 0: CN_A=1, CN_B=4, Total=5
+    Bin 1: CN_A=1, CN_B=4, Total=5
+    Bin 2: CN_A=1, CN_B=4, Total=5
+    Bin 3: CN_A=1, CN_B=4, Total=5
+    Bin 4: CN_A=1, CN_B=4, Total=5
+    Bin 5: CN_A=1, CN_B=4, Total=5
+    Bin 6: CN_A=1, CN_B=4, Total=5
+    Bin 7: CN_A=1, CN_B=4, Total=5
+    Bin 8: CN_A=1, CN_B=4, Total=5
+    Bin 9: CN_A=1, CN_B=4, Total=5
+
+======================================================================
+LEAF CLONE 3: Path from root: 0 → 2 → 3
+======================================================================
+
+Initial state (Root, Clone 0):
+  All bins: CN_A = 1, CN_B = 1 (diploid)
+
+----------------------------------------------------------------------
+Edge: Clone 0 → Clone 2
+----------------------------------------------------------------------
+  Events on this edge: 1
+
+  Event 1:
+    Type: A
+    Bins: [59, 101] (length: 43)
+    Amplitude: +5
+    Effect: CN change of +5 on haplotype A
+
+  Example bin changes:
+    Bin 59:
+      Before: CN_A=1, CN_B=1, Total=2
+      After:  CN_A=6, CN_B=1, Total=7
+      Change: ΔCN_A=+5, ΔCN_B=+0
+    Bin 80:
+      Before: CN_A=1, CN_B=1, Total=2
+      After:  CN_A=6, CN_B=1, Total=7
+      Change: ΔCN_A=+5, ΔCN_B=+0
+
+----------------------------------------------------------------------
+Edge: Clone 2 → Clone 3
+----------------------------------------------------------------------
+  Events on this edge: 2
+
+  Event 1:
+    Type: B
+    Bins: [120, 165] (length: 46)
+    Amplitude: -2
+    Effect: CN change of -2 on haplotype B
+
+  Event 2:
+    Type: B
+    Bins: [18, 63] (length: 46)
+    Amplitude: +2
+    Effect: CN change of +2 on haplotype B
+
+  Checking for overlapping events:
+
+  Example bin changes:
+    Bin 120:
+      Before: CN_A=1, CN_B=1, Total=2
+      After:  CN_A=1, CN_B=0, Total=1
+      Change: ΔCN_A=+0, ΔCN_B=-1
+    Bin 142:
+      Before: CN_A=1, CN_B=1, Total=2
+      After:  CN_A=1, CN_B=0, Total=1
+      Change: ΔCN_A=+0, ΔCN_B=-1
+
+======================================================================
+FINAL STATE for Leaf Clone 3:
+======================================================================
+  Unique total CN values: 5
+  CN range: 1 to 9
+
+  Sample bins (first 10):
+    Bin 0: CN_A=1, CN_B=1, Total=2
+    Bin 1: CN_A=1, CN_B=1, Total=2
+    Bin 2: CN_A=1, CN_B=1, Total=2
+    Bin 3: CN_A=1, CN_B=1, Total=2
+    Bin 4: CN_A=1, CN_B=1, Total=2
+    Bin 5: CN_A=1, CN_B=1, Total=2
+    Bin 6: CN_A=1, CN_B=1, Total=2
+    Bin 7: CN_A=1, CN_B=1, Total=2
+    Bin 8: CN_A=1, CN_B=1, Total=2
+    Bin 9: CN_A=1, CN_B=1, Total=2
+
+======================================================================
+LEAF CLONE 4: Path from root: 0 → 2 → 4
+======================================================================
+
+Initial state (Root, Clone 0):
+  All bins: CN_A = 1, CN_B = 1 (diploid)
+
+----------------------------------------------------------------------
+Edge: Clone 0 → Clone 2
+----------------------------------------------------------------------
+  Events on this edge: 1
+
+  Event 1:
+    Type: A
+    Bins: [59, 101] (length: 43)
+    Amplitude: +5
+    Effect: CN change of +5 on haplotype A
+
+  Example bin changes:
+    Bin 59:
+      Before: CN_A=1, CN_B=1, Total=2
+      After:  CN_A=6, CN_B=1, Total=7
+      Change: ΔCN_A=+5, ΔCN_B=+0
+    Bin 80:
+      Before: CN_A=1, CN_B=1, Total=2
+      After:  CN_A=6, CN_B=1, Total=7
+      Change: ΔCN_A=+5, ΔCN_B=+0
+
+----------------------------------------------------------------------
+Edge: Clone 2 → Clone 4
+----------------------------------------------------------------------
+  Events on this edge: 1
+
+  Event 1:
+    Type: A
+    Bins: [8, 54] (length: 47)
+    Amplitude: -3
+    Effect: CN change of -3 on haplotype A
+
+  Example bin changes:
+    Bin 8:
+      Before: CN_A=1, CN_B=1, Total=2
+      After:  CN_A=0, CN_B=1, Total=1
+      Change: ΔCN_A=-1, ΔCN_B=+0
+    Bin 31:
+      Before: CN_A=1, CN_B=1, Total=2
+      After:  CN_A=0, CN_B=1, Total=1
+      Change: ΔCN_A=-1, ΔCN_B=+0
+
+======================================================================
+FINAL STATE for Leaf Clone 4:
+======================================================================
+  Unique total CN values: 3
+  CN range: 1 to 7
+
+  Sample bins (first 10):
+    Bin 0: CN_A=1, CN_B=1, Total=2
+    Bin 1: CN_A=1, CN_B=1, Total=2
+    Bin 2: CN_A=1, CN_B=1, Total=2
+    Bin 3: CN_A=1, CN_B=1, Total=2
+    Bin 4: CN_A=1, CN_B=1, Total=2
+    Bin 5: CN_A=1, CN_B=1, Total=2
+    Bin 6: CN_A=1, CN_B=1, Total=2
+    Bin 7: CN_A=1, CN_B=1, Total=2
+    Bin 8: CN_A=0, CN_B=1, Total=1
+    Bin 9: CN_A=0, CN_B=1, Total=1
+
+======================================================================
+VERIFICATION SUMMARY
+======================================================================
+
+Overlapping Event Handling:
+  ✓ Events on same edge are applied using difference arrays
+  ✓ Overlapping intervals: effects are ADDITIVE within same haplotype
+  ✓ After all events: CN is clipped to [0, C_max]
+  ✓ Different haplotypes: independent effects
+
+Implementation (from simulator.py):
+  1. Inherit parent CN: c_v ← c_parent
+  2. If WGD: c_v ← 2 × c_v
+  3. Build difference arrays for all gain/loss events
+  4. Compute prefix sums: δ_v,b = Σ d_v,j
+  5. Apply: c_v,b ← clip(c_v,b + δ_v,b, 0, C_max)
+
+======================================================================
+DONE: Manual trace complete!
+======================================================================
+
+Saved detailed event log to: event_trace_verification.json
