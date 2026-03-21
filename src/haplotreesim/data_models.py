@@ -291,20 +291,23 @@ class SimulationConfig:
     alpha_tree: float = 0.5  # Beta distribution α parameter (controls balance)
     beta_tree: float = 0.3   # Beta distribution β parameter (smaller = more imbalanced)  # "diploid" or "wgd" - root initialization
     
-    # CNA event model (Section 3.3)
+    # CNA event model (Section 3.4)
     lambda_events: float = 1.5  # λ_E: mean number of events per edge
     lambda_amplitude: float = 1.0  # λ_Δ: parameter for amplitude distribution
     prob_wgd: float = 0.0  # p_WGD: probability of WGD event
     prob_mirror: float = 0.0  # p_mirror: probability of mirrored subclones
     gain_prob: float = 0.5  # Probability that an event is a gain (vs loss)
     
-    # Event size distribution (focal/arm/chromosomal)
-    focal_prob: float = 0.7  # Probability of focal event
-    arm_prob: float = 0.2  # Probability of arm-level event
-    chrom_prob: float = 0.1  # Probability of chromosomal event
-    focal_size_mean: int = 50  # Mean size of focal events in bins
-    arm_size_mean: int = 500  # Mean size of arm events in bins
+    # Event scale class probabilities (Equations 21-23)
+    prob_focal: float = 0.7  # p_focal: focal event probability
+    prob_arm_given_broad: float = 0.75  # q_arm: arm probability among broad events
     
+    # Focal event length distribution (Equation 24)
+    focal_length_min: float = 0.5e6  # L_min: 0.5 Mb minimum
+    focal_length_max_fraction: float = 0.5  # Max = 0.5 * arm_length
+    
+    # Haplotype selection (Equation 28)
+    prob_haplotype_A: float = 0.5  # p_A: probability of selecting haplotype A
     # Cell sampling (Section 3.4)
     num_cells: int = 200  # N in paper
     prob_normal: float = 0.0  # p_normal: fraction of normal cells
@@ -336,8 +339,6 @@ class SimulationConfig:
         assert 0 <= self.prob_doublet <= 1, "prob_doublet must be in [0, 1]"
         assert 0 <= self.prob_wgd <= 1, "prob_wgd must be in [0, 1]"
         assert 0 <= self.prob_mirror <= 1, "prob_mirror must be in [0, 1]"
-        assert abs(self.focal_prob + self.arm_prob + self.chrom_prob - 1.0) < 1e-6, \
-            "Event size probabilities must sum to 1"
     
     def get_root_cn(self) -> Tuple[int, int]:
         """

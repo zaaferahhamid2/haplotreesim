@@ -187,15 +187,16 @@ class HaploTreeSimulator:
         event_generator = EventGenerator(
             rng=self.rng,
             num_bins=self.config.num_bins,
+            bin_length=self.config.bin_length,
             lambda_events=self.config.lambda_events,
             lambda_amplitude=self.config.lambda_amplitude,
             prob_wgd=self.config.prob_wgd,
-            focal_prob=self.config.focal_prob,
-            arm_prob=self.config.arm_prob,
-            chrom_prob=self.config.chrom_prob,
-            focal_size_mean=self.config.focal_size_mean,
-            arm_size_mean=self.config.arm_size_mean,
             gain_prob=self.config.gain_prob,
+            prob_focal=self.config.prob_focal,
+            prob_arm_given_broad=self.config.prob_arm_given_broad,
+            focal_length_min=self.config.focal_length_min,
+            focal_length_max_fraction=self.config.focal_length_max_fraction,
+            prob_haplotype_A=self.config.prob_haplotype_A,
         )
         
         event_applier = EventApplier(max_copy_number=self.config.max_copy_number)
