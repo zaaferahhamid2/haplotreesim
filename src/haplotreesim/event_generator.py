@@ -24,7 +24,8 @@ class EventGenerator:
         self,
         rng: np.random.Generator,
         num_bins: int,
-        bin_length: int = 1000000,  # 1 Mb bins default
+        bin_length: int = 500000,  # 500 kb bins default
+        chromosome: str = 'chr1',  # Which chromosome
         lambda_events: float = 2.0,
         lambda_amplitude: float = 1.0,
         prob_wgd: float = 0.0,
@@ -70,11 +71,17 @@ class EventGenerator:
         self.w_arm = (1 - prob_focal) * prob_arm_given_broad
         self.w_chr = (1 - prob_focal) * (1 - prob_arm_given_broad)
         
-        # For simplicity: single chromosome model
-        # In real implementation, would track multiple chromosomes
-        self.genome_length = num_bins * bin_length
-        # Assume chromosome arms are roughly half the chromosome
-        self.arm_length = self.genome_length / 2
+        # Get real chromosome arm lengths
+        from .chromosome_data import get_chromosome_length, get_arm_boundaries
+        
+        self.chromosome = chromosome
+        self.genome_length = get_chromosome_length(chromosome)
+        
+        # Get centromere position
+        p_end, q_start = get_arm_boundaries(chromosome)
+        self.p_arm_length = p_end
+        self.q_arm_length = self.genome_length - q_start
+        self.arm_length = max(self.p_arm_length, self.q_arm_length)
     
     def generate_events(self, num_events: int) -> List[CNAEvent]:
         """
@@ -166,21 +173,29 @@ class EventGenerator:
     
     def _sample_arm_event(self) -> Tuple[int, int]:
         """
-        Sample arm-level event.
-        
-        In simplified single-chromosome model, covers approximately half.
+        Sample arm-level event using real chromosome arms.
         
         Returns:
             (start_bin, end_bin) tuple
         """
-        # For single chromosome: randomly choose first or second half
-        if self.rng.random() < 0.5:
-            # First arm
+        from .chromosome_data import get_arm_boundaries
+        
+        p_end, q_start = get_arm_boundaries(self.chromosome)
+        
+        # Convert to bin indices
+        p_arm_end_bin = p_end // self.bin_length
+        q_arm_start_bin = q_start // self.bin_length
+        
+        # Choose p or q arm with probability proportional to arm length
+        p_prob = self.p_arm_length / (self.p_arm_length + self.q_arm_length)
+        
+        if self.rng.random() < p_prob:
+            # P arm
             start_bin = 0
-            end_bin = self.num_bins // 2 - 1
+            end_bin = min(p_arm_end_bin, self.num_bins - 1)
         else:
-            # Second arm
-            start_bin = self.num_bins // 2
+            # Q arm
+            start_bin = max(q_arm_start_bin, 0)
             end_bin = self.num_bins - 1
         
         return start_bin, end_bin
