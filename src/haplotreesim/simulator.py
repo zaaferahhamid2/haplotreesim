@@ -187,7 +187,8 @@ class HaploTreeSimulator:
         event_generator = EventGenerator(
             rng=self.rng,
             num_bins=self.config.num_bins,
-            bin_length=self.config.bin_length,
+            bin_length=self.config.bin_width,
+            chromosome=self.config.chromosome,
             lambda_events=self.config.lambda_events,
             lambda_amplitude=self.config.lambda_amplitude,
             prob_wgd=self.config.prob_wgd,
