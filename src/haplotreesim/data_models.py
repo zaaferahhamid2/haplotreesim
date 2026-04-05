@@ -278,9 +278,14 @@ class SimulationConfig:
     """
     
     # Genome representation (Section 3.1)
-    num_bins: int = 10000  # B in paper
-    bin_length: int = 50000  # Length of each bin in bp (50kb default)
-    genome_length: int = 500_000_000  # Total genome length (e.g., 500Mb for testing)
+    # Real chromosome mode (hg38)
+    chromosome: str = "chr1"  # Which chromosome to simulate
+    bin_width: int = 500000  # Bin width in base pairs (500 kb default)
+    
+    # Legacy parameters (computed automatically from chromosome)
+    num_bins: Optional[int] = None  # Computed from chromosome length / bin_width
+    bin_length: Optional[int] = None  # Same as bin_width (for compatibility)
+    genome_length: Optional[int] = None  # Computed from chromosome
     
     # Clone tree and states (Section 3.2)
     num_clones: int = 5  # K in paper
@@ -331,6 +336,21 @@ class SimulationConfig:
     
     def __post_init__(self):
         """Validate configuration parameters."""
+        # Import here to avoid circular dependency
+        from .chromosome_data import get_chromosome_length, create_bins_for_chromosome
+        
+        # Compute genome parameters from chromosome
+        chrom_length = get_chromosome_length(self.chromosome)
+        computed_bins = create_bins_for_chromosome(self.chromosome, self.bin_width)
+        
+        # Set computed values if not provided
+        if self.num_bins is None:
+            object.__setattr__(self, 'num_bins', computed_bins)
+        if self.bin_length is None:
+            object.__setattr__(self, 'bin_length', self.bin_width)
+        if self.genome_length is None:
+            object.__setattr__(self, 'genome_length', chrom_length)
+        
         assert self.num_bins > 0, "num_bins must be positive"
         assert self.num_clones > 0, "num_clones must be positive"
         assert self.num_cells > 0, "num_cells must be positive"

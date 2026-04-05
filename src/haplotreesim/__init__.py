@@ -2,7 +2,7 @@
 HaploTreeSim: A Controlled, End-to-End Benchmark for Low-Pass scDNA-seq
 """
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 from .data_models import (
     Bin,
@@ -21,6 +21,7 @@ from .event_applier import EventApplier
 from .tree_builder import TreeBuilder
 from .beta_tree_builder import BetaSplittingTreeBuilder
 from .segment_detector import SegmentDetector
+from . import chromosome_data
 
 __all__ = [
     "Bin",
@@ -37,4 +38,5 @@ __all__ = [
     "TreeBuilder",
     "BetaSplittingTreeBuilder",
     "SegmentDetector",
+    "chromosome_data",
 ]
