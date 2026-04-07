@@ -348,6 +348,26 @@ class HaploTreeSimulator:
         
         return self.rng.lognormal(mu, sigma, size=num_cells)
     
+    
+    def _sample_bin_biases(self) -> np.ndarray:
+        """
+        Sample bin bias factors (κ_b) for GC/mappability effects.
+        
+        Uses log-normal distribution centered at 1.0.
+        
+        Returns:
+            Array of length B with bias factors (mean = 1.0)
+        """
+        if not self.config.use_gc_bias:
+            # No bias
+            return np.ones(self.config.num_bins)
+        
+        # Sample from log-normal and normalize to have mean 1
+        biases = self.rng.lognormal(0, 0.3, size=self.config.num_bins)
+        biases = biases / biases.mean()  # Normalize so mean = 1
+        
+        return biases
+
     def _generate_read_counts(self) -> np.ndarray:
         """
         Generate read-depth counts (x_{n,b}) via negative binomial model.
@@ -366,8 +386,10 @@ class HaploTreeSimulator:
                 # Total copy number at this bin
                 tcn = clone.cn_profile_A[b] + clone.cn_profile_B[b]
                 
-                # Bin bias (κ_b, set to 1 for now)
-                kappa_b = 1.0
+                # Bin bias (κ_b)
+                if not hasattr(self, 'bin_biases'):
+                    self.bin_biases = self._sample_bin_biases()
+                kappa_b = self.bin_biases[b]
                 
                 # Mean read count: μ_{n,b} = α_n * κ_b * (TCN / 2)
                 mu = cell.library_size * kappa_b * (tcn / 2.0)
