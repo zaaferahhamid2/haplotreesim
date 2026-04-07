@@ -496,18 +496,71 @@ class HaploTreeSimulator:
             for bin_idx in segment.bin_indices:
                 self.bin_to_segment[bin_idx] = segment.index
         
-        # Create one haplotype block per segment (for now)
+        # Create haplotype blocks with phase-switch process
         self.haplotype_blocks = []
+        self._create_haplotype_blocks_with_phase_switches()
+
+
+    def _create_haplotype_blocks_with_phase_switches(self):
+        """
+        Create haplotype blocks using phase-switch process.
+        
+        Implements stochastic phase-switching between segments:
+        - Start with orientation η = +1, alternate haplotype ϕ = A
+        - At each segment boundary, switch with probability p_switch
+        """
+        if len(self.segments) == 0:
+            return
+        
+        current_block_idx = 0
+        current_orientation = 1
+        current_alternate = Haplotype.A
+        current_segments = []
+        
         for i, segment in enumerate(self.segments):
-            segment.haplotype_block = i
+            # Check if we should switch phase (except for first segment)
+            if i > 0 and self.rng.random() < self.config.prob_phase_switch:
+                # Save current block
+                if current_segments:
+                    hap_block = HaplotypeBlock(
+                        index=current_block_idx,
+                        segment_indices=current_segments.copy(),
+                        orientation=current_orientation,
+                        alternate_haplotype=current_alternate
+                    )
+                    self.haplotype_blocks.append(hap_block)
+                    
+                    # Assign segments to this block
+                    for seg_idx in current_segments:
+                        self.segments[seg_idx].haplotype_block = current_block_idx
+                        self.segment_to_block[seg_idx] = current_block_idx
+                    
+                    current_block_idx += 1
+                    current_segments = []
+                
+                # Switch phase: flip orientation with 50% probability
+                if self.rng.random() < 0.5:
+                    current_orientation *= -1
+                else:
+                    # Switch alternate haplotype
+                    current_alternate = Haplotype.B if current_alternate == Haplotype.A else Haplotype.A
+            
+            # Add segment to current block
+            current_segments.append(segment.index)
+        
+        # Save final block
+        if current_segments:
             hap_block = HaplotypeBlock(
-                index=i,
-                segment_indices=[segment.index],
-                orientation=1,
-                alternate_haplotype=Haplotype.A
+                index=current_block_idx,
+                segment_indices=current_segments.copy(),
+                orientation=current_orientation,
+                alternate_haplotype=current_alternate
             )
             self.haplotype_blocks.append(hap_block)
-            self.segment_to_block[segment.index] = i
+            
+            for seg_idx in current_segments:
+                self.segments[seg_idx].haplotype_block = current_block_idx
+                self.segment_to_block[seg_idx] = current_block_idx
 
     def get_ground_truth(self) -> Dict:
         """
