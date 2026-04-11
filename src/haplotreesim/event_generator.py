@@ -147,9 +147,9 @@ class EventGenerator:
         Returns:
             (start_bin, end_bin) tuple
         """
-        # L_max = 0.5 * arm_length (Equation 24)
-        L_max = self.focal_length_max_fraction * self.arm_length
-        L_min = self.focal_length_min
+        # Equation 27: L_max = 10 Mb (fixed upper bound)
+        L_max = 10e6  # 10 Mb (ensures focal events remain sub-arm)
+        L_min = max(self.bin_length, 0.5e6)  # max(bin_width, 0.5 Mb)
         
         # Sample from truncated log-uniform (Equation 24)
         # f(L) = 1/(L * log(L_max/L_min)) for L in [L_min, L_max]

@@ -70,6 +70,10 @@ class HaploTreeSimulator:
         print(f"Generating clone tree with {self.config.num_clones} clones...")
         self._generate_clone_tree()
 
+        # Compute ploidy for each clone (Section 2: auxiliary truth)
+        for clone in self.clones:
+            clone.ploidy = float(np.mean(clone.total_cn()))
+        
         print("Detecting segments from CNA breakpoints...")
         self._detect_segments_from_clones()
         
@@ -215,9 +219,9 @@ class HaploTreeSimulator:
             parent_clone = self.clones[node_id_to_clone_idx[parent_node.node_id]]
             
             # Generate events for this edge
-            # Equation (18): M_v ~ 1 + Poisson(λ_E * τ_v)
-            # Events tied to branch length!
-            num_events = 1 + self.rng.poisson(self.config.lambda_events * node.edge_length)
+            # Equation (21): M_v ~ Poisson(λ_E * τ_v) 
+            # Events tied to branch length (no +1 offset)
+            num_events = self.rng.poisson(self.config.lambda_events * node.edge_length)
             
             # Allow WGD only on edges from root
             allow_wgd = (node.parent_id == 0 and self.config.prob_wgd > 0)
@@ -456,9 +460,15 @@ class HaploTreeSimulator:
                 if hap_block.orientation == -1:
                     p_alt = 1.0 - p_alt
                 
+                # Apply LOH floor to prevent degenerate Beta (Equation 50)
+                p_alt = np.clip(p_alt, self.config.epsilon_floor, 1.0 - self.config.epsilon_floor)
+                
+                # Add sequencing error contamination (Equation 52)
+                p_alt = (1.0 - self.config.epsilon_seq) * p_alt + self.config.epsilon_seq * 0.5
+                
                 # Beta-Binomial: sample q ~ Beta(p*ν, (1-p)*ν), then a ~ Binomial(t, q)
-                alpha_beta = max(0.1, p_alt * self.config.nu_a)  # Ensure positive
-                beta_beta = max(0.1, (1.0 - p_alt) * self.config.nu_a)  # Ensure positive
+                alpha_beta = p_alt * self.config.nu_a
+                beta_beta = (1.0 - p_alt) * self.config.nu_a
                 
                 q = self.rng.beta(alpha_beta, beta_beta)
                 a_ns = self.rng.binomial(t_ns, q)
@@ -503,64 +513,57 @@ class HaploTreeSimulator:
 
     def _create_haplotype_blocks_with_phase_switches(self):
         """
-        Create haplotype blocks using phase-switch process.
+        Create haplotype blocks at chromosome-arm level.
         
-        Implements stochastic phase-switching between segments:
-        - Start with orientation η = +1, alternate haplotype ϕ = A
-        - At each segment boundary, switch with probability p_switch
+        Section 3.1: "We define haplotype blocks at the chromosome-arm level:
+        each chromosome arm constitutes one block"
+        
+        For single chromosome: H = 2 (p-arm and q-arm)
+        Phase orientation sampled once per arm with probability p_switch.
         """
+        from .chromosome_data import get_arm_boundaries
+        
         if len(self.segments) == 0:
             return
         
-        current_block_idx = 0
-        current_orientation = 1
-        current_alternate = Haplotype.A
-        current_segments = []
+        # Get chromosome arm boundaries
+        p_end, q_start = get_arm_boundaries(self.config.chromosome)
+        p_arm_end_bin = p_end // self.config.bin_width
+        q_arm_start_bin = q_start // self.config.bin_width
         
-        for i, segment in enumerate(self.segments):
-            # Check if we should switch phase (except for first segment)
-            if i > 0 and self.rng.random() < self.config.prob_phase_switch:
-                # Save current block
-                if current_segments:
-                    hap_block = HaplotypeBlock(
-                        index=current_block_idx,
-                        segment_indices=current_segments.copy(),
-                        orientation=current_orientation,
-                        alternate_haplotype=current_alternate
-                    )
-                    self.haplotype_blocks.append(hap_block)
-                    
-                    # Assign segments to this block
-                    for seg_idx in current_segments:
-                        self.segments[seg_idx].haplotype_block = current_block_idx
-                        self.segment_to_block[seg_idx] = current_block_idx
-                    
-                    current_block_idx += 1
-                    current_segments = []
-                
-                # Switch phase: flip orientation with 50% probability
-                if self.rng.random() < 0.5:
-                    current_orientation *= -1
-                else:
-                    # Switch alternate haplotype
-                    current_alternate = Haplotype.B if current_alternate == Haplotype.A else Haplotype.A
+        # Create two blocks: one for p-arm, one for q-arm
+        self.haplotype_blocks = []
+        
+        for arm_idx in range(2):  # 0=p-arm, 1=q-arm
+            # Sample orientation (Equation 51)
+            # η_h = -1 with probability p_switch, else +1
+            if self.rng.random() < self.config.prob_phase_switch:
+                orientation = -1
+            else:
+                orientation = +1
             
-            # Add segment to current block
-            current_segments.append(segment.index)
-        
-        # Save final block
-        if current_segments:
+            # Default: alternate haplotype is A
+            alternate_hap = Haplotype.A
+            
             hap_block = HaplotypeBlock(
-                index=current_block_idx,
-                segment_indices=current_segments.copy(),
-                orientation=current_orientation,
-                alternate_haplotype=current_alternate
+                index=arm_idx,
+                segment_indices=[],
+                orientation=orientation,
+                alternate_haplotype=alternate_hap
             )
             self.haplotype_blocks.append(hap_block)
+        
+        # Assign each segment to its arm block
+        for segment in self.segments:
+            # Check if segment is in p-arm or q-arm based on its position
+            if segment.end_bin < p_arm_end_bin:
+                block_idx = 0  # p-arm
+            else:
+                block_idx = 1  # q-arm
             
-            for seg_idx in current_segments:
-                self.segments[seg_idx].haplotype_block = current_block_idx
-                self.segment_to_block[seg_idx] = current_block_idx
+            segment.haplotype_block = block_idx
+            self.haplotype_blocks[block_idx].segment_indices.append(segment.index)
+            self.segment_to_block[segment.index] = block_idx
 
     def get_ground_truth(self) -> Dict:
         """

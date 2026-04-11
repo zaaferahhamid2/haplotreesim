@@ -174,6 +174,7 @@ class Clone:
     cn_profile_B: np.ndarray  # Shape: (B,)
     events: List[CNAEvent] = field(default_factory=list)
     is_root: bool = False
+    ploidy: Optional[float] = None  # Mean genome-wide ploidy (p̄_v in paper)
     
     def __post_init__(self):
         """Validate clone properties."""
@@ -301,7 +302,7 @@ class SimulationConfig:
     lambda_amplitude: float = 1.0  # λ_Δ: parameter for amplitude distribution
     prob_wgd: float = 0.0  # p_WGD: probability of WGD event
     prob_mirror: float = 0.0  # p_mirror: probability of mirrored subclones
-    gain_prob: float = 0.5  # Probability that an event is a gain (vs loss)
+    gain_prob: float = 0.40  # 60% losses (losses predominate in solid tumors)
     
     # Event scale class probabilities (Equations 21-23)
     prob_focal: float = 0.7  # p_focal: focal event probability
@@ -330,6 +331,14 @@ class SimulationConfig:
     allelic_coverage_cv: float = 0.3  # Coefficient of variation for allelic coverage
     nu_a: float = 20.0  # Concentration parameter for Beta-Binomial
     prob_phase_switch: float = 0.01  # p_switch: phase switch probability
+    
+    # Additional observation model parameters (Equations 50, 52)
+    epsilon_seq: float = 0.001  # Sequencing error contamination
+    epsilon_floor: float = 1e-6  # LOH floor to prevent degenerate Beta
+    
+    # WGD parameters (Section 3.4)
+    prob_wgd: float = 0.0  # p_WGD: probability of WGD event
+    d_wgd: int = 2  # Depth limit for WGD placement
     
     # Random seed
     random_seed: Optional[int] = None
