@@ -46,6 +46,10 @@ class HaploTreeSimulator:
         # Data structures (to be populated)
         self.bins: List[Bin] = []
         self.segments: List[Segment] = []
+        
+        # WGD tracking
+        self.wgd_occurred: bool = False
+        self.wgd_node: Optional[int] = None  # Which node has WGD
         self.haplotype_blocks: List[HaplotypeBlock] = []
         self.clones: List[Clone] = []
         self.cells: List[Cell] = []
@@ -210,10 +214,17 @@ class HaploTreeSimulator:
         # Build clones for all nodes (not just leaves)
         nodes_by_id = {node.node_id: node for node in tree_nodes}
         
+        # Sample WGD placement BEFORE processing nodes (Equations 18-19)
+        wgd_node_id = self._sample_wgd_placement()
+        if wgd_node_id is not None:
+            self.wgd_occurred = True
+            self.wgd_node = wgd_node_id  # Store node_id
+            print(f"  WGD will be placed on edge to node {wgd_node_id}")
+        
         # Process nodes in order of node_id (ensures parents before children)
         for node in sorted(tree_nodes, key=lambda n: n.node_id):
             if node.node_id == 0:
-                continue  # Root already created
+                continue  # Root already created                print(f"    node.node_id = {node.node_id}")
             
             parent_node = nodes_by_id[node.parent_id]
             parent_clone = self.clones[node_id_to_clone_idx[parent_node.node_id]]
@@ -223,25 +234,23 @@ class HaploTreeSimulator:
             # Events tied to branch length (no +1 offset)
             num_events = self.rng.poisson(self.config.lambda_events * node.edge_length)
             
-            # Allow WGD only on edges from root
-            allow_wgd = (node.parent_id == 0 and self.config.prob_wgd > 0)
-            
-            # Generate events
+            # Generate focal/arm/chr events
             events = []
             for _ in range(num_events):
-                if allow_wgd and self.rng.random() < self.config.prob_wgd and len(events) == 0:
-                    # WGD event (only one per edge, applied first)
-                    from .data_models import CNAEvent, Haplotype
-                    wgd = CNAEvent(
-                        start_bin=0,
-                        end_bin=self.config.num_bins - 1,
-                        haplotype=Haplotype.WGD,
-                        amplitude=0
-                    )
-                    events.append(wgd)
-                else:
-                    event = event_generator._generate_single_event()
-                    events.append(event)
+                event = event_generator._generate_single_event()
+                events.append(event)
+            
+            # Check if THIS node is the WGD node (Equation 19)
+            # If so, prepend WGD event (applied BEFORE other events)
+            if self.wgd_occurred and node.node_id == self.wgd_node:
+                from .data_models import CNAEvent, Haplotype
+                wgd = CNAEvent(
+                    start_bin=0,
+                    end_bin=self.config.num_bins - 1,
+                    haplotype=Haplotype.WGD,
+                    amplitude=0
+                )
+                events = [wgd] + events  # WGD applied FIRST
             
             # Apply events to get child CN profile
             cn_A, cn_B = event_applier.apply_events(parent_clone, events)
@@ -269,6 +278,57 @@ class HaploTreeSimulator:
         print(f"  Created {len(self.clones)} clones ({num_leaves} leaves)")
         print(f"  Total CNA events: {total_events}")
         print(f"  Clone proportions: {clone_proportions}")
+
+
+    def _sample_wgd_placement(self):
+        """
+        Sample WGD placement according to Equations 18-19.
+        
+        Returns:
+            Node ID where WGD occurs, or None if no WGD
+        """
+        # Step 1: Check if WGD occurs (probability p_WGD)
+        if self.rng.random() >= self.config.prob_wgd:
+            return None
+        
+        # Step 2: Find early edges (depth <= d_WGD)
+        early_edges = []
+        for node in self._tree_nodes:
+            if node.node_id == 0:  # Skip root
+                continue
+            
+            # Compute depth (number of edges from root)
+            depth = self._get_node_depth(node)
+            
+            if depth <= self.config.d_wgd:
+                early_edges.append(node)
+        
+        if not early_edges:
+            return None
+        
+        # Step 3: Sample edge proportional to branch length (Equation 18)
+        branch_lengths = np.array([node.edge_length for node in early_edges])
+        probs = branch_lengths / branch_lengths.sum()
+        
+        selected_idx = self.rng.choice(len(early_edges), p=probs)
+        wgd_node = early_edges[selected_idx]
+        
+        return wgd_node.node_id
+    
+    def _get_node_depth(self, node):
+        """
+        Compute depth of a node (number of edges from root).
+        """
+        depth = 0
+        current = node
+        nodes_by_id = {n.node_id: n for n in self._tree_nodes}
+        
+        # Walk up to root (parent_id = -1 or None means root)
+        while current.parent_id not in (-1, None):
+            depth += 1
+            current = nodes_by_id[current.parent_id]
+        
+        return depth
 
     def _sample_cells(self):
         """
@@ -306,18 +366,45 @@ class HaploTreeSimulator:
                 p=clone_frequencies
             )
         
-        # Create cell objects
+        # Create cell objects with doublet sampling
         self.cells = []
+        num_doublets = 0
+        
         for n in range(self.config.num_cells):
+            # Check if this cell is a doublet
+            is_doublet = self.rng.random() < self.config.prob_doublet
+            
+            if is_doublet:
+                # Sample two clones independently
+                k1 = self.rng.choice(len(self._leaf_clone_indices), p=self._clone_proportions)
+                k2 = self.rng.choice(len(self._leaf_clone_indices), p=self._clone_proportions)
+                
+                # Map to actual clone indices
+                clone1 = self._leaf_clone_indices[k1]
+                clone2 = self._leaf_clone_indices[k2]
+                
+                doublet_pair = (clone1, clone2)
+                num_doublets += 1
+                
+                # For clone assignment, use first clone
+                clone_assign = clone1
+            else:
+                doublet_pair = None
+                clone_assign = clone_assignments[n]
+            
             cell = Cell(
                 index=n,
-                clone_assignment=clone_assignments[n],
+                clone_assignment=clone_assign,
                 library_size=library_sizes[n],
                 allelic_coverage=allelic_coverages[n],
                 is_normal=False,
-                is_doublet=False
+                is_doublet=is_doublet,
+                doublet_clones=doublet_pair
             )
             self.cells.append(cell)
+        
+        if num_doublets > 0:
+            print(f"  Sampled {num_doublets} doublets ({100*num_doublets/self.config.num_cells:.1f}%)")
         
         print(f"  Sampled {len(self.cells)} cells")
         print(f"  Clone distribution: {np.bincount(clone_assignments)}")
@@ -428,8 +515,6 @@ class HaploTreeSimulator:
         total_counts = np.zeros((N, S), dtype=int)
         
         for n, cell in enumerate(self.cells):
-            clone = self.clones[cell.clone_assignment]
-            
             for s, segment in enumerate(self.segments):
                 # Sample number of heterozygous SNPs in this segment
                 M_s = self.rng.poisson(self.config.snp_density * segment.length)
@@ -437,28 +522,72 @@ class HaploTreeSimulator:
                 if M_s == 0:
                     continue
                 
-                # Get average copy numbers over segment
-                cn_A, cn_B, tcn = clone.get_segment_cn(segment)
-                
-                # Total allelic depth: Poisson(β_n * M_s * TCN / 2)
-                if tcn > 0:
-                    t_ns = self.rng.poisson(cell.allelic_coverage * M_s * (tcn / 2.0))
+                # Handle doublets differently (Equation 15)
+                if cell.is_doublet:
+                    k1, k2 = cell.doublet_clones
+                    clone1 = self.clones[k1]
+                    clone2 = self.clones[k2]
+                    
+                    # Get CN for both clones
+                    cn_A1, cn_B1, tcn1 = clone1.get_segment_cn(segment)
+                    cn_A2, cn_B2, tcn2 = clone2.get_segment_cn(segment)
+                    
+                    hap_block = self.haplotype_blocks[segment.haplotype_block]
+                    
+                    # Get alternate CN for each clone
+                    if hap_block.alternate_haplotype == Haplotype.A:
+                        cn_alt1 = cn_A1
+                        cn_alt2 = cn_A2
+                    else:
+                        cn_alt1 = cn_B1
+                        cn_alt2 = cn_B2
+                    
+                    # CN-weighted mixture (Equation 15)
+                    epsilon = 1e-10
+                    p_doublet = (cn_alt1 + cn_alt2) / (tcn1 + tcn2 + epsilon)
+                    
+                    # Total depth for doublet (sum of both clones)
+                    tcn_doublet = tcn1 + tcn2
+                    if tcn_doublet > 0:
+                        t_ns = self.rng.poisson(cell.allelic_coverage * M_s * (tcn_doublet / 2.0))
+                    else:
+                        t_ns = 0
+                    
+                    if t_ns == 0:
+                        continue
+                    
+                    # Apply phase orientation
+                    if hap_block.orientation == -1:
+                        p_doublet = 1.0 - p_doublet
+                    
+                    p_alt = p_doublet
+                    
                 else:
-                    t_ns = 0
-                
-                if t_ns == 0:
-                    continue
-                
-                # Expected alternate fraction (assuming phase orientation = 1 for now)
-                hap_block = self.haplotype_blocks[segment.haplotype_block]
-                if hap_block.alternate_haplotype == Haplotype.A:
-                    p_alt = cn_A / (tcn + 1e-10)
-                else:
-                    p_alt = cn_B / (tcn + 1e-10)
-                
-                # Apply phase orientation
-                if hap_block.orientation == -1:
-                    p_alt = 1.0 - p_alt
+                    # Singlet cell
+                    clone = self.clones[cell.clone_assignment]
+                    
+                    # Get average copy numbers over segment
+                    cn_A, cn_B, tcn = clone.get_segment_cn(segment)
+                    
+                    # Total allelic depth: Poisson(β_n * M_s * TCN / 2)
+                    if tcn > 0:
+                        t_ns = self.rng.poisson(cell.allelic_coverage * M_s * (tcn / 2.0))
+                    else:
+                        t_ns = 0
+                    
+                    if t_ns == 0:
+                        continue
+                    
+                    # Expected alternate fraction
+                    hap_block = self.haplotype_blocks[segment.haplotype_block]
+                    if hap_block.alternate_haplotype == Haplotype.A:
+                        p_alt = cn_A / (tcn + 1e-10)
+                    else:
+                        p_alt = cn_B / (tcn + 1e-10)
+                    
+                    # Apply phase orientation
+                    if hap_block.orientation == -1:
+                        p_alt = 1.0 - p_alt
                 
                 # Apply LOH floor to prevent degenerate Beta (Equation 50)
                 p_alt = np.clip(p_alt, self.config.epsilon_floor, 1.0 - self.config.epsilon_floor)
