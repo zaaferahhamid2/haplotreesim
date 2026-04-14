@@ -1,201 +1,138 @@
 # HaploTreeSim
-
 **A Controlled, End-to-End Benchmark with Haplotype-Resolved CNA and CNA-Phylogeny Ground Truth for Low-Pass scDNA-seq**
 
-## Week 5 Deliverable: Repository + Configuration Skeleton
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/zaaferahhamid2/haplotreesim/releases/tag/v1.0.0)
+[![Paper Compliant](https://img.shields.io/badge/paper-compliant-brightgreen.svg)](#)
 
-This repository contains the initial implementation of HaploTreeSim, a simulator for generating synthetic single-cell DNA sequencing (scDNA-seq) data with ground-truth haplotype-specific copy number alterations (CNAs) and clone phylogenies.
+HaploTreeSim is a simulator for generating synthetic single-cell DNA sequencing (scDNA-seq) datasets with ground-truth haplotype-specific copy number alterations (CNAs) and clone phylogenies.
 
-### Current Status (Week 5)
+---
 
-The minimal simulator is now functional and produces diploid output (no CNAs yet). The following components are implemented:
+## 🎯 Current Status: v1.0.0 (Paper-Compliant)
 
-✅ **Repository Structure**: Clean Python package with `src/`, `tests/`, and `configs/` directories  
-✅ **Data Models**: Complete class definitions for bins, segments, clones, events, and cells  
-✅ **Simulator Core**: Basic simulator that outputs diploid read-count and allele-count matrices  
-✅ **Configuration System**: Flexible configuration using dataclasses  
-✅ **Test Suite**: Verification tests for Week 5 deliverable
+**✅ Complete Implementation** of all features specified in the HaploTreeSim paper.
 
-### Repository Structure
+### Recent Updates
+- **v1.0.0** (April 2026): Phase B - WGD placement model + doublet allelic model
+- **v0.9.0** (April 2026): Phase A - Parameter updates for paper compliance
 
-```
-haplotreesim/
-├── src/
-│   └── haplotreesim/
-│       ├── __init__.py           # Package initialization
-│       ├── data_models.py        # Core data structures
-│       └── simulator.py          # Main simulator class
-├── tests/
-│   └── test_week5.py             # Week 5 verification tests
-├── configs/
-│   └── example_configs.py        # Example configurations
-├── docs/                         # Documentation (future)
-├── setup.py                      # Package installation
-├── README.md                     # This file
-└── requirements.txt              # Python dependencies
-```
+---
 
-### Data Models
+## 🚀 Key Features
 
-The following data structures are implemented (see `src/haplotreesim/data_models.py`):
+### Clone Tree Generation
+- **Beta-splitting tree** with controlled leaf proportions
+- K extant clones with imbalanced topology
+- Clone mixing proportions sum to 1
 
-- **`Bin`**: Fixed-width genomic regions with GC/mappability annotations
-- **`Segment`**: Contiguous intervals of bins with uniform copy number
-- **`HaplotypeBlock`**: Groups of segments with shared phasing
-- **`CNAEvent`**: Copy number alteration events (gains, losses, WGD)
-- **`Clone`**: Tree nodes with haplotype-specific CN profiles
-- **`Cell`**: Individual cells with clone assignments and observations
-- **`SimulationConfig`**: Complete parameter configuration
+### CNA Evolution
+- **Focal/Arm/Chromosome events** with configurable rates
+- **Whole Genome Doubling (WGD)**: Early placement (Equations 18-19)
+- **Haplotype-specific** copy number evolution
+- **Overlapping events** via difference arrays
 
-### Installation
+### Observation Models
+- **Read-depth**: Negative Binomial with library size variation
+- **Allelic counts**: Beta-Binomial with LOH floor and sequencing error
+- **Doublet model**: CN-weighted allelic mixture (Equation 15)
 
+### Ground Truth
+- Haplotype-specific CN profiles per clone
+- Clone tree topology and branch lengths
+- CNA event history per edge
+- **Ploidy per clone** for normalization
+- Segment boundaries from breakpoints
+
+---
+
+## 📦 Installation
 ```bash
+git clone https://github.com/zaaferahhamid2/haplotreesim.git
 cd haplotreesim
 pip install -e .
 ```
 
-Or install with development dependencies:
+---
 
-```bash
-pip install -e ".[dev]"
-```
-
-### Quick Start
-
+## 🎮 Quick Start
 ```python
 from haplotreesim import SimulationConfig, HaploTreeSimulator
 
-# Create configuration
 config = SimulationConfig(
-    num_bins=1000,
+    chromosome='chr1',
+    bin_width=500000,
     num_clones=5,
     num_cells=200,
-    root_type="diploid",
+    lambda_events=2.0,
+    prob_wgd=0.3,
+    prob_doublet=0.05,
     random_seed=42
 )
 
-# Initialize and run simulator
 sim = HaploTreeSimulator(config)
 read_counts, (alt_counts, ref_counts, total_counts) = sim.run()
 
-# Get ground truth
-ground_truth = sim.get_ground_truth()
+# Access ground truth
+for clone in sim.clones:
+    print(f"Clone {clone.index}: ploidy={clone.ploidy:.2f}")
 ```
 
-### Running Tests
+---
 
-```bash
-cd haplotreesim
-python tests/test_week5.py
-```
+## 📊 Example Outputs
 
-Expected output:
-```
-======================================================================
-Week 5 Test: Minimal Diploid Simulator
-======================================================================
+See `sample_outputs/` for visualization examples:
+- Week 8: CN profiles with WGD
+- Week 9: Read depth vs CN (ploidy normalization)
+- Week 10: BAF patterns with doublets
 
-Initializing genome...
-Generating clone tree with 3 clones...
-Sampling 50 cells...
-Generating read-depth observations...
-Generating allelic observations...
-Simulation complete!
+---
 
-======================================================================
-Verification
-======================================================================
-✓ Read counts shape: (50, 100)
-✓ Allele counts shape: (50, 1)
-✓ All 3 clones are diploid (1,1)
-✓ Mean read count per bin: 25.34
-✓ Total allelic reads: 75234
-
-Week 5 Test PASSED! ✓
-```
-
-### Current Functionality (Week 5)
-
-The simulator currently supports:
-
-1. **Genome Initialization**
-   - Fixed-width bins with configurable size
-   - Single segment covering entire genome (breakpoints coming in Week 6)
-   - Single haplotype block (phase switches coming later)
-
-2. **Clone Tree Generation**
-   - Root clone initialization (diploid or WGD)
-   - Multiple clones (all copies of root for now)
-   - Tree structure and CNA events coming in Week 6
-
-3. **Cell Sampling**
-   - Uniform sampling from clones
-   - Log-normal library size and allelic coverage factors
-   - Normal cells and doublets coming later
-
-4. **Observation Models**
-   - **Read counts**: Negative Binomial model with overdispersion
-   - **Allele counts**: Beta-Binomial model with overdispersion
-   - Realistic noise matching low-pass scDNA-seq
-
-5. **Ground Truth Extraction**
-   - Clone assignments (z_n)
-   - Haplotype-specific CN profiles (c^(A), c^(B))
-   - Clone tree structure
-   - Event lists (empty for Week 5)
-
-### Configuration Parameters
-
-Key parameters in `SimulationConfig`:
-
+## ⚙️ Key Parameters
 ```python
-# Genome
-num_bins: int = 10000              # Number of genomic bins
-bin_length: int = 50000            # Bin size in bp (50kb default)
+# Tree
+num_clones: int = 5
+alpha_tree: float = 0.5
+beta_tree: float = 0.3
 
-# Clones
-num_clones: int = 5                # Number of clones
-root_type: str = "diploid"         # "diploid" or "wgd"
+# Events
+lambda_events: float = 1.5
+gain_prob: float = 0.40        # 60% losses
 
-# Cells
-num_cells: int = 200               # Number of cells to simulate
+# WGD & Contaminants
+prob_wgd: float = 0.0
+prob_doublet: float = 0.0
+prob_phase_switch: float = 0.01
 
-# Read-depth model
-mean_library_size: float = 100.0   # Mean coverage factor α_n
-theta_x: float = 10.0              # Overdispersion parameter
-
-# Allelic model
-snp_density: float = 0.001         # Heterozygous SNPs per bp
-mean_allelic_coverage: float = 50.0  # Mean allelic depth β_n
-nu_a: float = 20.0                 # Beta-Binomial concentration
+# Coverage
+mean_library_size: float = 50000
+snp_density: float = 1e-3
 ```
 
-### Week 6
+---
 
-The following features are implemented in Week 6:
+## 📖 Documentation
 
-- [ ] Segment boundary detection from CNA breakpoints
-- [ ] CNA event generation (gains, losses)
-- [ ] Event application to clone CN profiles
-- [ ] Tree structure generation
-- [ ] Non-uniform clone frequencies
+- [PHASE_B_SUMMARY.md](PHASE_B_SUMMARY.md) - WGD + doublet details
+- [PROJECT_STATUS.md](PROJECT_STATUS.md) - Development roadmap
+- [BRANCH_GUIDE.md](BRANCH_GUIDE.md) - Branch organization
 
-### Example Configurations
+---
 
-See `configs/example_configs.py` for three example configurations:
+## 🎯 Roadmap
 
-1. **`minimal_diploid`**: Simple 100-cell, 3-clone diploid simulation
-2. **`low_pass_config`**: 200-cell simulation with low-pass coverage (0.01x)
-3. **`wgd_root_config`**: WGD root simulation for tetraploid tumors
+- [x] Weeks 5-10: Core simulator
+- [x] Phase A: Parameter updates
+- [x] Phase B: WGD + doublets
+- [ ] Week 11: Core metrics
+- [ ] Weeks 12-28: Evaluation framework & baselines
 
-### References
+---
 
-This simulator implements the models described in the HaploTreeSim paper (sections 3.1-3.6).
+## 📧 Contact
 
-### License
+Repository: https://github.com/zaaferahhamid2/haplotreesim
 
-[To be determined]
+---
 
-### Contact
-
-[Your contact information]
+**Version**: 1.0.0 | **Status**: ✅ Paper-Compliant | **Updated**: April 2026
