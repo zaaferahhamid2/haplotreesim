@@ -6,6 +6,8 @@ scDNA-seq data with haplotype-specific CNAs and clone tree ground truth.
 """
 
 import numpy as np
+import json
+import pickle
 from typing import List, Tuple, Dict, Optional
 from .data_models import (
     Bin, Segment, HaplotypeBlock, CNAEvent, Clone, Cell,
@@ -58,6 +60,187 @@ class HaploTreeSimulator:
         self.bin_to_segment: Dict[int, int] = {}  # bin index -> segment index
         self.segment_to_block: Dict[int, int] = {}  # segment index -> block index
     
+
+    def export_tree_structure(self, filepath: str):
+        """
+        Export tree structure for reuse across simulations.
+        
+        Saves:
+        - Node IDs, parent relationships, branch lengths
+        - Clone proportions
+        - Tree topology
+        
+        Args:
+            filepath: Path to save tree structure (.pkl or .json)
+        """
+        tree_data = {
+            'num_clones': self.config.num_clones,
+            'alpha_tree': self.config.alpha_tree,
+            'beta_tree': self.config.beta_tree,
+            'nodes': [],
+            'clone_proportions': self._clone_proportions.tolist() if hasattr(self, '_clone_proportions') else None,
+            'leaf_clone_indices': self._leaf_clone_indices if hasattr(self, '_leaf_clone_indices') else None
+        }
+        
+        # Export tree nodes
+        for node in self._tree_nodes:
+            tree_data['nodes'].append({
+                'node_id': int(node.node_id),
+                'parent_id': int(node.parent_id) if node.parent_id is not None else None,
+                'edge_length': float(node.edge_length),
+                'is_leaf': bool(node.is_leaf)
+            })
+        
+        if filepath.endswith('.json'):
+            with open(filepath, 'w') as f:
+                json.dump(tree_data, f, indent=2)
+        else:
+            with open(filepath, 'wb') as f:
+                pickle.dump(tree_data, f)
+        
+        print(f"✓ Tree structure exported to: {filepath}")
+    
+    def import_tree_structure(self, filepath: str):
+        """
+        Import previously saved tree structure.
+        
+        Args:
+            filepath: Path to tree structure file (.pkl or .json)
+        """
+        if filepath.endswith('.json'):
+            with open(filepath, 'r') as f:
+                tree_data = json.load(f)
+        else:
+            with open(filepath, 'rb') as f:
+                tree_data = pickle.load(f)
+        
+        # Recreate tree nodes
+        from .beta_tree_builder import TreeNode
+        
+        self._tree_nodes = []
+        for node_data in tree_data['nodes']:
+            node = TreeNode(
+                node_id=node_data['node_id'],
+                parent_id=node_data['parent_id'],
+                edge_length=node_data['edge_length'],
+                is_leaf=node_data['is_leaf']
+            )
+            self._tree_nodes.append(node)
+        
+        self._clone_proportions = np.array(tree_data['clone_proportions'])
+        self._leaf_clone_indices = tree_data['leaf_clone_indices']
+        
+        print(f"✓ Tree structure imported from: {filepath}")
+        print(f"  Nodes: {len(self._tree_nodes)}, Leaves: {len([n for n in self._tree_nodes if n.is_leaf])}")
+
+
+    def _initialize_clones_from_imported_tree(self):
+        """
+        Initialize clones from imported tree structure.
+        Called after import_tree_structure() to continue simulation.
+        """
+        from .event_generator import EventGenerator
+        from .event_applier import EventApplier
+        
+        # Initialize event infrastructure
+        event_generator = EventGenerator(
+            rng=self.rng,
+            num_bins=self.config.num_bins,
+            bin_length=self.config.bin_width,
+            chromosome=self.config.chromosome,
+            lambda_events=self.config.lambda_events,
+            lambda_amplitude=self.config.lambda_amplitude,
+            prob_wgd=self.config.prob_wgd,
+            gain_prob=self.config.gain_prob,
+            prob_focal=self.config.prob_focal,
+            prob_arm_given_broad=self.config.prob_arm_given_broad,
+            focal_length_min=self.config.focal_length_min,
+            focal_length_max_fraction=self.config.focal_length_max_fraction,
+            prob_haplotype_A=self.config.prob_haplotype_A,
+        )
+        
+        event_applier = EventApplier(max_copy_number=self.config.max_copy_number)
+        
+        # Sample WGD placement
+        wgd_node_id = self._sample_wgd_placement()
+        if wgd_node_id is not None:
+            self.wgd_occurred = True
+            self.wgd_node = wgd_node_id
+            print(f"  WGD will be placed on edge to node {wgd_node_id}")
+        
+        # Create root clone
+        cn_A_init, cn_B_init = self.config.get_root_cn()
+        root_cn_A = np.full(self.config.num_bins, cn_A_init, dtype=int)
+        root_cn_B = np.full(self.config.num_bins, cn_B_init, dtype=int)
+        
+        root_clone = Clone(
+            index=0,
+            parent_index=None,
+            cn_profile_A=root_cn_A,
+            cn_profile_B=root_cn_B,
+            events=[],
+            is_root=True
+        )
+        
+        node_id_to_clone_idx = {}
+        self.clones = [root_clone]
+        node_id_to_clone_idx[0] = 0
+        
+        # Process nodes in order
+        nodes_by_id = {node.node_id: node for node in self._tree_nodes}
+        
+        for node in sorted(self._tree_nodes, key=lambda n: n.node_id):
+            if node.node_id == 0:
+                continue
+            
+            parent_node = nodes_by_id[node.parent_id]
+            parent_clone = self.clones[node_id_to_clone_idx[parent_node.node_id]]
+            
+            # Generate events
+            num_events = self.rng.poisson(self.config.lambda_events * node.edge_length)
+            
+            events = []
+            for _ in range(num_events):
+                event = event_generator._generate_single_event()
+                events.append(event)
+            
+            # Check for WGD
+            if self.wgd_occurred and node.node_id == self.wgd_node:
+                from .data_models import CNAEvent, Haplotype
+                wgd = CNAEvent(
+                    start_bin=0,
+                    end_bin=self.config.num_bins - 1,
+                    haplotype=Haplotype.WGD,
+                    amplitude=0
+                )
+                events = [wgd] + events
+            
+            # Apply events
+            cn_A, cn_B = event_applier.apply_events(parent_clone, events)
+            
+            # Create clone
+            child_clone = Clone(
+                index=len(self.clones),
+                parent_index=node_id_to_clone_idx[parent_node.node_id],
+                cn_profile_A=cn_A,
+                cn_profile_B=cn_B,
+                events=events,
+                is_root=False
+            )
+            
+            self.clones.append(child_clone)
+            node_id_to_clone_idx[node.node_id] = child_clone.index
+        
+        # Compute ploidy
+        for clone in self.clones:
+            clone.ploidy = float(np.mean(clone.total_cn()))
+        
+        # Detect segments
+        self._detect_segments_from_clones()
+        
+        print(f"  Created {len(self.clones)} clones from imported tree")
+        print(f"  Total CNA events: {sum(len(c.events) for c in self.clones)}")
+
     def run(self) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
         """
         Run the full simulation pipeline.
