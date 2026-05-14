@@ -288,3 +288,26 @@ class BenchmarkRunner:
 def run_benchmark(config: BenchmarkConfig):
     runner = BenchmarkRunner(config)
     return runner.run()
+
+
+if __name__ == "__main__":
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(description="HaploTreeSim Benchmark Pipeline")
+    parser.add_argument("--config", type=str, required=True, help="Path to JSON config file")
+    args = parser.parse_args()
+
+    with open(args.config, 'r') as f:
+        cfg = json.load(f)
+
+    sim_cfg = SimulationConfig(**cfg.get("sim_config", {}))
+    bench_cfg = BenchmarkConfig(
+        sim_config=sim_cfg,
+        output_dir=cfg.get("output_dir", "benchmark_results"),
+        methods=cfg.get("methods", ["dummy"]),
+        breakpoint_tolerance=cfg.get("breakpoint_tolerance", 2),
+        event_tolerance=cfg.get("event_tolerance", 1),
+    )
+
+    run_benchmark(bench_cfg)

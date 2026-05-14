@@ -1,0 +1,13 @@
+{
+  "sim_config": {
+    "num_clones": 5,
+    "num_cells": 100,
+    "lambda_events": 1.5,
+    "lambda_amplitude": 1.0,
+    "prob_wgd": 0.0
+  },
+  "output_dir": "benchmark_results",
+  "methods": ["dummy"],
+  "breakpoint_tolerance": 2,
+  "event_tolerance": 1
+}
