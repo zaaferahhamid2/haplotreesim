@@ -296,7 +296,7 @@ Then register it in `BenchmarkRunner._initialize_methods()` and add `"my_method"
 - [x] Week 12: Clone assignment metrics (11 tests)
 - [x] Week 13: Tree metrics (9 tests)
 - [x] Week 14: Benchmark pipeline with CLI (`v1.3.0`)
-- [ ] Week 15: SEACON integration
+- [x] Week 15: SEACON integration
 - [ ] Week 16: CHISEL/Alleloscope integration
 - [ ] Weeks 17–19: CNA-tree baselines + MEDICC2
 - [ ] Weeks 20–24: Full experiment grid
