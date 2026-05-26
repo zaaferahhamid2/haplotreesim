@@ -60,6 +60,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lambda-events", type=float, default=5)
     parser.add_argument("--lambda-amplitude", type=float, default=1.0)
     parser.add_argument("--prob-wgd", type=float, default=0.0)
+    parser.add_argument("--prob-normal", type=float, default=0.0, help="Fraction of normal (diploid) cells.")
     parser.add_argument("--random-seed", type=int, default=42)
     return parser.parse_args()
 
@@ -117,6 +118,7 @@ def main() -> None:
         lambda_events=args.lambda_events,
         lambda_amplitude=args.lambda_amplitude,
         prob_wgd=args.prob_wgd,
+        prob_normal=args.prob_normal,
         random_seed=args.random_seed,
     )
 

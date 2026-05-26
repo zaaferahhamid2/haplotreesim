@@ -142,6 +142,12 @@ def main() -> None:
             "for dense SEACON input."
         )
 
+    # Write diploid.txt with normal cell names (clone_assignment == 0)
+    normal_cells = cells[cells["clone_assignment"] == 0]["cell"].tolist()
+    if normal_cells:
+        (output_dir / "diploid.txt").write_text("\n".join(normal_cells) + "\n")
+        print(f"  Wrote diploid.txt with {len(normal_cells)} normal cells")
+
     manifest = {
         "source_dataset": str(input_dir),
         "format": "seacon-input",
