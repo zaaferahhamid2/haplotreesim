@@ -90,7 +90,8 @@ class EventApplier:
         """
         Apply gain/loss to a specific genomic region.
         
-        Implements: c^(γ)_{k,b} = clip(c^(γ)_{π(k),b} + Δ·I[b_min ≤ b ≤ b_max], 0, C_max)
+        Implements the ordered CNA update without post-hoc clipping:
+        c^(γ)_{k,b} = c^(γ)_{π(k),b} + Δ·I[b_min ≤ b ≤ b_max].
         
         Args:
             cn_profile: Copy number profile for one haplotype
@@ -101,11 +102,21 @@ class EventApplier:
         """
         cn_profile = cn_profile.copy()
         
-        # Apply amplitude to affected region
-        cn_profile[event.start_bin:event.end_bin + 1] += event.amplitude
-        
-        # Clip to valid range [0, C_max]
-        cn_profile = self._clip_cn(cn_profile)
+        current_region = cn_profile[event.start_bin:event.end_bin + 1]
+        if event.amplitude > 0 and np.any(current_region < 1):
+            raise ValueError(
+                "Gain event cannot amplify absent haplotype material: "
+                f"{event.event_id}"
+            )
+
+        updated_region = current_region + event.amplitude
+        if np.any(updated_region < 0) or np.any(updated_region > self.max_copy_number):
+            raise ValueError(
+                "CNA event would leave copy-number bounds without clipping: "
+                f"{event.event_id}"
+            )
+
+        cn_profile[event.start_bin:event.end_bin + 1] = updated_region
         
         return cn_profile
     

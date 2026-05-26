@@ -55,10 +55,41 @@ class HaploTreeSimulator:
         self.haplotype_blocks: List[HaplotypeBlock] = []
         self.clones: List[Clone] = []
         self.cells: List[Cell] = []
+        self.chromosome_bin_offsets: Dict[str, Tuple[int, int]] = {}
+        self.chromosome_boundary_bins: List[int] = []
+        self.chromosome_intervals: List[Tuple[str, int, int]] = []
+        self.chromosome_arm_intervals: List[Tuple[str, str, int, int]] = []
         
         # Mappings
         self.bin_to_segment: Dict[int, int] = {}  # bin index -> segment index
+        self.bin_to_block: Dict[int, int] = {}  # bin index -> haplotype block index
         self.segment_to_block: Dict[int, int] = {}  # segment index -> block index
+        self.bin_snp_counts: Optional[np.ndarray] = None  # M_b for allelic simulation
+
+    def _create_event_generator(self):
+        """Create an event generator using the simulator's current genome layout."""
+        from .event_generator import EventGenerator
+
+        return EventGenerator(
+            rng=self.rng,
+            num_bins=self.config.num_bins,
+            bin_length=self.config.bin_width,
+            chromosome=self.config.chromosome,
+            chromosomes=self.config.chromosomes,
+            chromosome_intervals=self.chromosome_intervals,
+            arm_intervals=self.chromosome_arm_intervals,
+            lambda_events=self.config.lambda_events,
+            lambda_amplitude=self.config.lambda_amplitude,
+            prob_wgd=self.config.prob_wgd,
+            gain_prob=self.config.gain_prob,
+            prob_focal=self.config.prob_focal,
+            prob_arm_given_broad=self.config.prob_arm_given_broad,
+            focal_length_min=self.config.focal_length_min,
+            focal_length_max_fraction=self.config.focal_length_max_fraction,
+            prob_haplotype_A=self.config.prob_haplotype_A,
+            max_copy_number=self.config.max_copy_number,
+            max_event_attempts=self.config.max_event_attempts,
+        )
     
 
     def export_tree_structure(self, filepath: str):
@@ -87,7 +118,10 @@ class HaploTreeSimulator:
             tree_data['nodes'].append({
                 'node_id': int(node.node_id),
                 'parent_id': int(node.parent_id) if node.parent_id is not None else None,
+                'interval': [float(node.interval[0]), float(node.interval[1])],
+                'perc': float(node.perc),
                 'edge_length': float(node.edge_length),
+                'depth': int(node.depth),
                 'is_leaf': bool(node.is_leaf)
             })
         
@@ -113,6 +147,10 @@ class HaploTreeSimulator:
         else:
             with open(filepath, 'rb') as f:
                 tree_data = pickle.load(f)
+
+        if tree_data.get('num_clones') is not None:
+            # A fixed tree defines its extant leaf count.
+            self.config.num_clones = int(tree_data['num_clones'])
         
         # Recreate tree nodes
         from .beta_tree_builder import TreeNode
@@ -122,7 +160,10 @@ class HaploTreeSimulator:
             node = TreeNode(
                 node_id=node_data['node_id'],
                 parent_id=node_data['parent_id'],
+                interval=tuple(node_data.get('interval', (0.0, 0.0))),
+                perc=node_data.get('perc', 0.0),
                 edge_length=node_data['edge_length'],
+                depth=node_data.get('depth', 0),
                 is_leaf=node_data['is_leaf']
             )
             self._tree_nodes.append(node)
@@ -133,32 +174,55 @@ class HaploTreeSimulator:
         print(f"✓ Tree structure imported from: {filepath}")
         print(f"  Nodes: {len(self._tree_nodes)}, Leaves: {len([n for n in self._tree_nodes if n.is_leaf])}")
 
+    def _generate_ordered_edge_events(
+        self,
+        event_generator,
+        parent_clone: Clone,
+        node,
+        include_wgd: bool
+    ) -> List[CNAEvent]:
+        """
+        Generate an ordered, state-dependent event list for one tree edge.
+        """
+        events: List[CNAEvent] = []
+        state_A = parent_clone.cn_profile_A.copy()
+        state_B = parent_clone.cn_profile_B.copy()
+
+        if include_wgd:
+            wgd = CNAEvent(
+                start_bin=0,
+                end_bin=self.config.num_bins - 1,
+                haplotype=Haplotype.WGD,
+                amplitude=0,
+                event_time=0.0,
+                scale_class="wgd"
+            )
+            events.append(wgd)
+            state_A = np.clip(state_A * 2, 0, self.config.max_copy_number)
+            state_B = np.clip(state_B * 2, 0, self.config.max_copy_number)
+
+        num_proposals = self.rng.poisson(self.config.lambda_events * node.edge_length)
+        events.extend(
+            event_generator.generate_valid_events(
+                num_proposals=num_proposals,
+                edge_length=node.edge_length,
+                cn_A=state_A,
+                cn_B=state_B
+            )
+        )
+
+        return events
+
 
     def _initialize_clones_from_imported_tree(self):
         """
         Initialize clones from imported tree structure.
         Called after import_tree_structure() to continue simulation.
         """
-        from .event_generator import EventGenerator
         from .event_applier import EventApplier
         
         # Initialize event infrastructure
-        event_generator = EventGenerator(
-            rng=self.rng,
-            num_bins=self.config.num_bins,
-            bin_length=self.config.bin_width,
-            chromosome=self.config.chromosome,
-            lambda_events=self.config.lambda_events,
-            lambda_amplitude=self.config.lambda_amplitude,
-            prob_wgd=self.config.prob_wgd,
-            gain_prob=self.config.gain_prob,
-            prob_focal=self.config.prob_focal,
-            prob_arm_given_broad=self.config.prob_arm_given_broad,
-            focal_length_min=self.config.focal_length_min,
-            focal_length_max_fraction=self.config.focal_length_max_fraction,
-            prob_haplotype_A=self.config.prob_haplotype_A,
-        )
-        
+        event_generator = self._create_event_generator()
         event_applier = EventApplier(max_copy_number=self.config.max_copy_number)
         
         # Sample WGD placement
@@ -196,24 +260,12 @@ class HaploTreeSimulator:
             parent_node = nodes_by_id[node.parent_id]
             parent_clone = self.clones[node_id_to_clone_idx[parent_node.node_id]]
             
-            # Generate events
-            num_events = self.rng.poisson(self.config.lambda_events * node.edge_length)
-            
-            events = []
-            for _ in range(num_events):
-                event = event_generator._generate_single_event()
-                events.append(event)
-            
-            # Check for WGD
-            if self.wgd_occurred and node.node_id == self.wgd_node:
-                from .data_models import CNAEvent, Haplotype
-                wgd = CNAEvent(
-                    start_bin=0,
-                    end_bin=self.config.num_bins - 1,
-                    haplotype=Haplotype.WGD,
-                    amplitude=0
-                )
-                events = [wgd] + events
+            events = self._generate_ordered_edge_events(
+                event_generator=event_generator,
+                parent_clone=parent_clone,
+                node=node,
+                include_wgd=self.wgd_occurred and node.node_id == self.wgd_node
+            )
             
             # Apply events
             cn_A, cn_B = event_applier.apply_events(parent_clone, events)
@@ -241,28 +293,42 @@ class HaploTreeSimulator:
         print(f"  Created {len(self.clones)} clones from imported tree")
         print(f"  Total CNA events: {sum(len(c.events) for c in self.clones)}")
 
-    def run(self) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    def run(
+        self,
+        tree_structure_path: Optional[str] = None
+    ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
         """
         Run the full simulation pipeline.
+
+        Args:
+            tree_structure_path: Optional exported tree structure to reuse.
         
         Returns:
             Tuple of:
                 - read_counts: Array of shape (N, B) with read counts
                 - allele_counts: Tuple of (alternate, reference, total) arrays,
-                                each of shape (N, S)
+                                each of shape (N, B)
         """
         print("Initializing genome...")
         self._initialize_genome()
-        
-        print(f"Generating clone tree with {self.config.num_clones} clones...")
-        self._generate_clone_tree()
 
-        # Compute ploidy for each clone (Section 2: auxiliary truth)
-        for clone in self.clones:
-            clone.ploidy = float(np.mean(clone.total_cn()))
-        
-        print("Detecting segments from CNA breakpoints...")
-        self._detect_segments_from_clones()
+        self.wgd_occurred = False
+        self.wgd_node = None
+
+        if tree_structure_path is None:
+            print(f"Generating clone tree with {self.config.num_clones} clones...")
+            self._generate_clone_tree()
+
+            # Compute ploidy for each clone (Section 2: auxiliary truth)
+            for clone in self.clones:
+                clone.ploidy = float(np.mean(clone.total_cn()))
+
+            print("Detecting segments from CNA breakpoints...")
+            self._detect_segments_from_clones()
+        else:
+            print(f"Importing clone tree from {tree_structure_path}...")
+            self.import_tree_structure(tree_structure_path)
+            self._initialize_clones_from_imported_tree()
         
         print(f"Sampling {self.config.num_cells} cells...")
         self._sample_cells()
@@ -275,56 +341,135 @@ class HaploTreeSimulator:
         
         print("Simulation complete!")
         return read_counts, allele_counts
+
+    def run_with_tree_structure(
+        self,
+        filepath: str
+    ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        """Run the simulator using a previously exported fixed tree."""
+        return self.run(tree_structure_path=filepath)
     
     def _initialize_genome(self):
         """
         Initialize genome representation (bins, segments, haplotype blocks).
-        
-        For Week 5 deliverable: creates uniform bins with a single segment
-        covering the entire genome.
         """
-        # Create bins
+        from .chromosome_data import create_bins_for_chromosome, get_chromosome_length
+
         self.bins = []
-        for i in range(self.config.num_bins):
-            start = i * self.config.bin_length
-            end = start + self.config.bin_length
-            bin_obj = Bin(
-                index=i,
-                chromosome="chr1",  # Simplified: single chromosome
-                start=start,
-                end=end,
-                length=self.config.bin_length
+        self.segments = []
+        self.chromosome_bin_offsets = {}
+        self.chromosome_boundary_bins = []
+        self.chromosome_intervals = []
+
+        computed_counts = {
+            chromosome: create_bins_for_chromosome(chromosome, self.config.bin_width)
+            for chromosome in self.config.chromosomes
+        }
+        computed_total = sum(computed_counts.values())
+        if len(self.config.chromosomes) == 1 and self.config.num_bins != computed_total:
+            chromosome_counts = {self.config.chromosomes[0]: self.config.num_bins}
+            use_reference_lengths = False
+        elif self.config.num_bins == computed_total:
+            chromosome_counts = computed_counts
+            use_reference_lengths = True
+        else:
+            raise ValueError(
+                "Explicit num_bins with multiple chromosomes is ambiguous; "
+                "omit num_bins so it can be computed from chromosomes and bin_width."
             )
-            self.bins.append(bin_obj)
-        
-        # Create a single segment covering all bins (for now)
-        # In future weeks, segments will be defined by CNA breakpoints
-        segment = Segment(
-            index=0,
-            bin_indices=set(range(self.config.num_bins)),
-            start_bin=0,
-            end_bin=self.config.num_bins - 1,
-            length=self.config.num_bins * self.config.bin_length,
-            haplotype_block=0
-        )
-        self.segments = [segment]
+
+        global_bin = 0
+        for chromosome in self.config.chromosomes:
+            chrom_first_bin = global_bin
+            chrom_length = get_chromosome_length(chromosome)
+            bin_count = chromosome_counts[chromosome]
+
+            if chrom_first_bin > 0:
+                self.chromosome_boundary_bins.append(chrom_first_bin)
+
+            for local_bin in range(bin_count):
+                start = local_bin * self.config.bin_length
+                if use_reference_lengths:
+                    end = min(start + self.config.bin_length, chrom_length)
+                else:
+                    end = start + self.config.bin_length
+
+                if end <= start:
+                    continue
+
+                bin_obj = Bin(
+                    index=global_bin,
+                    chromosome=chromosome,
+                    start=start,
+                    end=end,
+                    length=end - start
+                )
+                self.bins.append(bin_obj)
+                global_bin += 1
+
+            chrom_last_bin = global_bin - 1
+            self.chromosome_bin_offsets[chromosome] = (chrom_first_bin, chrom_last_bin)
+            self.chromosome_intervals.append((chromosome, chrom_first_bin, chrom_last_bin))
+
+            segment = Segment(
+                index=len(self.segments),
+                bin_indices=set(range(chrom_first_bin, chrom_last_bin + 1)),
+                start_bin=chrom_first_bin,
+                end_bin=chrom_last_bin,
+                length=sum(bin_obj.length for bin_obj in self.bins[chrom_first_bin:chrom_last_bin + 1]),
+                haplotype_block=0
+            )
+            self.segments.append(segment)
+
+        self.chromosome_arm_intervals = self._build_chromosome_arm_intervals()
         
         # Create a single haplotype block
         hap_block = HaplotypeBlock(
             index=0,
-            segment_indices=[0],
+            segment_indices=[segment.index for segment in self.segments],
             orientation=1,
             alternate_haplotype=Haplotype.A
         )
         self.haplotype_blocks = [hap_block]
         
         # Build mappings
-        for bin_idx in range(self.config.num_bins):
-            self.bin_to_segment[bin_idx] = 0
-        self.segment_to_block[0] = 0
+        self.bin_to_segment = {}
+        self.bin_to_block = {}
+        self.segment_to_block = {}
+        for segment in self.segments:
+            for bin_idx in segment.bin_indices:
+                self.bin_to_segment[bin_idx] = segment.index
+                self.bin_to_block[bin_idx] = 0
+            self.segment_to_block[segment.index] = 0
         
         print(f"  Created {len(self.bins)} bins, {len(self.segments)} segments, "
               f"{len(self.haplotype_blocks)} haplotype blocks")
+
+    def _build_chromosome_arm_intervals(self) -> List[Tuple[str, str, int, int]]:
+        """Build chromosome-arm intervals in global bin coordinates."""
+        from .chromosome_data import get_arm_boundaries
+
+        arm_intervals: List[Tuple[str, str, int, int]] = []
+
+        for chromosome, (chrom_start, chrom_end) in self.chromosome_bin_offsets.items():
+            p_end, _ = get_arm_boundaries(chromosome)
+            p_bins = [
+                bin_obj.index
+                for bin_obj in self.bins[chrom_start:chrom_end + 1]
+                if (bin_obj.start + bin_obj.end) / 2 <= p_end
+            ]
+            q_bins = [
+                bin_obj.index
+                for bin_obj in self.bins[chrom_start:chrom_end + 1]
+                if (bin_obj.start + bin_obj.end) / 2 > p_end
+            ]
+
+            if p_bins:
+                arm_intervals.append((chromosome, "p", min(p_bins), max(p_bins)))
+            if q_bins:
+                arm_intervals.append((chromosome, "q", min(q_bins), max(q_bins)))
+
+        return arm_intervals
     
     def _generate_clone_tree(self):
         """
@@ -332,7 +477,6 @@ class HaploTreeSimulator:
         
         Updated: Now uses Beta-splitting tree model (Section 3.2).
         """
-        from .event_generator import EventGenerator
         from .event_applier import EventApplier
         from .beta_tree_builder import BetaSplittingTreeBuilder
         
@@ -375,22 +519,7 @@ class HaploTreeSimulator:
         node_id_to_clone_idx[0] = 0
         
         # Initialize event generator and applier
-        event_generator = EventGenerator(
-            rng=self.rng,
-            num_bins=self.config.num_bins,
-            bin_length=self.config.bin_width,
-            chromosome=self.config.chromosome,
-            lambda_events=self.config.lambda_events,
-            lambda_amplitude=self.config.lambda_amplitude,
-            prob_wgd=self.config.prob_wgd,
-            gain_prob=self.config.gain_prob,
-            prob_focal=self.config.prob_focal,
-            prob_arm_given_broad=self.config.prob_arm_given_broad,
-            focal_length_min=self.config.focal_length_min,
-            focal_length_max_fraction=self.config.focal_length_max_fraction,
-            prob_haplotype_A=self.config.prob_haplotype_A,
-        )
-        
+        event_generator = self._create_event_generator()
         event_applier = EventApplier(max_copy_number=self.config.max_copy_number)
         
         # Process tree nodes in breadth-first order
@@ -412,28 +541,12 @@ class HaploTreeSimulator:
             parent_node = nodes_by_id[node.parent_id]
             parent_clone = self.clones[node_id_to_clone_idx[parent_node.node_id]]
             
-            # Generate events for this edge
-            # Equation (21): M_v ~ Poisson(λ_E * τ_v) 
-            # Events tied to branch length (no +1 offset)
-            num_events = self.rng.poisson(self.config.lambda_events * node.edge_length)
-            
-            # Generate focal/arm/chr events
-            events = []
-            for _ in range(num_events):
-                event = event_generator._generate_single_event()
-                events.append(event)
-            
-            # Check if THIS node is the WGD node (Equation 19)
-            # If so, prepend WGD event (applied BEFORE other events)
-            if self.wgd_occurred and node.node_id == self.wgd_node:
-                from .data_models import CNAEvent, Haplotype
-                wgd = CNAEvent(
-                    start_bin=0,
-                    end_bin=self.config.num_bins - 1,
-                    haplotype=Haplotype.WGD,
-                    amplitude=0
-                )
-                events = [wgd] + events  # WGD applied FIRST
+            events = self._generate_ordered_edge_events(
+                event_generator=event_generator,
+                parent_clone=parent_clone,
+                node=node,
+                include_wgd=self.wgd_occurred and node.node_id == self.wgd_node
+            )
             
             # Apply events to get child CN profile
             cn_A, cn_B = event_applier.apply_events(parent_clone, events)
@@ -549,16 +662,23 @@ class HaploTreeSimulator:
                 p=clone_frequencies
             )
         
-        # Create cell objects with doublet sampling
+        # Create cell objects with contamination sampling
         self.cells = []
+        num_normals = 0
         num_doublets = 0
         
         for n in range(self.config.num_cells):
-            # Check if this cell is a doublet
-            is_doublet = self.rng.random() < self.config.prob_doublet
-            
-            if is_doublet:
+            is_normal = self.rng.random() < self.config.prob_normal
+            is_doublet = False
+
+            if is_normal:
+                # Normal cells retain the root diploid genotype.
+                doublet_pair = None
+                clone_assign = 0
+                num_normals += 1
+            elif self.rng.random() < self.config.prob_doublet:
                 # Sample two clones independently
+                is_doublet = True
                 k1 = self.rng.choice(len(self._leaf_clone_indices), p=self._clone_proportions)
                 k2 = self.rng.choice(len(self._leaf_clone_indices), p=self._clone_proportions)
                 
@@ -580,17 +700,20 @@ class HaploTreeSimulator:
                 clone_assignment=clone_assign,
                 library_size=library_sizes[n],
                 allelic_coverage=allelic_coverages[n],
-                is_normal=False,
+                is_normal=is_normal,
                 is_doublet=is_doublet,
                 doublet_clones=doublet_pair
             )
             self.cells.append(cell)
         
+        if num_normals > 0:
+            print(f"  Sampled {num_normals} normal cells ({100*num_normals/self.config.num_cells:.1f}%)")
         if num_doublets > 0:
             print(f"  Sampled {num_doublets} doublets ({100*num_doublets/self.config.num_cells:.1f}%)")
         
         print(f"  Sampled {len(self.cells)} cells")
-        print(f"  Clone distribution: {np.bincount(clone_assignments)}")
+        sampled_assignments = np.array([cell.clone_assignment for cell in self.cells])
+        print(f"  Clone distribution: {np.bincount(sampled_assignments)}")
     
     def _sample_library_sizes(self, num_cells: int) -> np.ndarray:
         """
@@ -654,41 +777,46 @@ class HaploTreeSimulator:
         read_counts = np.zeros((N, B), dtype=int)
         
         for n, cell in enumerate(self.cells):
-            clone = self.clones[cell.clone_assignment]
-            
             for b in range(B):
-                # Total copy number at this bin
-                tcn = clone.cn_profile_A[b] + clone.cn_profile_B[b]
-                
                 # Bin bias (κ_b)
                 if not hasattr(self, 'bin_biases'):
                     self.bin_biases = self._sample_bin_biases()
                 kappa_b = self.bin_biases[b]
-                
-                # Mean read count: μ_{n,b} = α_n * κ_b * (TCN / 2)
-                mu = cell.library_size * kappa_b * (tcn / 2.0)
-                
-                # Negative binomial: variance = μ + μ²/θ
-                # We use the (n, p) parameterization where:
-                #   n = θ, p = θ/(θ + μ)
-                if mu > 0:
-                    n_param = self.config.theta_x
-                    p_param = n_param / (n_param + mu)
-                    read_counts[n, b] = self.rng.negative_binomial(n_param, p_param)
+
+                if cell.is_doublet:
+                    k1, k2 = cell.doublet_clones
+                    read_counts[n, b] = (
+                        self._sample_clone_read_count(cell, self.clones[k1], b, kappa_b)
+                        + self._sample_clone_read_count(cell, self.clones[k2], b, kappa_b)
+                    )
                 else:
-                    read_counts[n, b] = 0
+                    clone = self.clones[cell.clone_assignment]
+                    read_counts[n, b] = self._sample_clone_read_count(cell, clone, b, kappa_b)
             
             # Store in cell object
             cell.read_counts = read_counts[n, :]
         
         return read_counts
+
+    def _sample_clone_read_count(self, cell: Cell, clone: Clone, bin_index: int, bin_bias: float) -> int:
+        """Sample one clone contribution to a cell-bin read-depth count."""
+        tcn = clone.cn_profile_A[bin_index] + clone.cn_profile_B[bin_index]
+        mu = cell.library_size * bin_bias * (tcn / 2.0)
+
+        if mu <= 0:
+            return 0
+
+        # NumPy uses the NB (n, p) parameterization for mean mu and size theta.
+        n_param = self.config.theta_x
+        p_param = n_param / (n_param + mu)
+        return int(self.rng.negative_binomial(n_param, p_param))
     
-    def _generate_allele_counts(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def _generate_segment_allele_counts_legacy(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Generate allele counts (a_{n,s}, r_{n,s}) via Beta-Binomial model.
+        Deprecated segment-level allele-count generator retained for reference.
         
         Returns:
-            Tuple of (alternate, reference, total) arrays, each of shape (N, S)
+            Tuple of deprecated segment-level arrays.
         """
         N = self.config.num_cells
         S = len(self.segments)
@@ -778,7 +906,7 @@ class HaploTreeSimulator:
                 # Add sequencing error contamination (Equation 52)
                 p_alt = (1.0 - self.config.epsilon_seq) * p_alt + self.config.epsilon_seq * 0.5
                 
-                # Beta-Binomial: sample q ~ Beta(p*ν, (1-p)*ν), then a ~ Binomial(t, q)
+                # Deprecated segment-level emission path.
                 alpha_beta = p_alt * self.config.nu_a
                 beta_beta = (1.0 - p_alt) * self.config.nu_a
                 
@@ -800,6 +928,113 @@ class HaploTreeSimulator:
         return alternate_counts, reference_counts, total_counts
     
 
+    def _sample_bin_alternate_count(self, total_depth: int, p_alt: float, snp_count: int) -> int:
+        """
+        Sample alternate reads for one cell-bin observation.
+
+        The default Beta-Binomial concentration is evidence-scaled by the
+        number of heterozygous SNPs in the bin. A sensitivity mode scales by
+        observed allelic depth, and a debug mode removes the Beta layer.
+        """
+        p_alt = np.clip(p_alt, self.config.epsilon_floor, 1.0 - self.config.epsilon_floor)
+        p_alt = (1.0 - self.config.epsilon_seq) * p_alt + self.config.epsilon_seq * 0.5
+
+        if self.config.disable_allelic_beta:
+            q_alt = p_alt
+        else:
+            evidence = total_depth if self.config.allelic_concentration_scale == "depth" else snp_count
+            nu_eff = self.config.nu_a * evidence
+            alpha_beta = p_alt * nu_eff
+            beta_beta = (1.0 - p_alt) * nu_eff
+            q_alt = self.rng.beta(alpha_beta, beta_beta)
+
+        return int(self.rng.binomial(total_depth, q_alt))
+
+    def _generate_allele_counts(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Generate bin-level allele counts (a_{n,b}, r_{n,b}).
+
+        Returns:
+            Tuple of (alternate_counts, reference_counts, total_counts), each
+            with shape (N, B), where B is the number of bins.
+        """
+        N = self.config.num_cells
+        B = self.config.num_bins
+
+        alternate_counts = np.zeros((N, B), dtype=int)
+        reference_counts = np.zeros((N, B), dtype=int)
+        total_counts = np.zeros((N, B), dtype=int)
+        self.bin_snp_counts = self.rng.poisson(
+            [self.config.snp_density * bin_obj.length for bin_obj in self.bins]
+        ).astype(int)
+
+        for n, cell in enumerate(self.cells):
+            for b, snp_count in enumerate(self.bin_snp_counts):
+                if snp_count == 0:
+                    continue
+
+                hap_block = self.haplotype_blocks[self.bin_to_block.get(b, 0)]
+
+                if cell.is_doublet:
+                    k1, k2 = cell.doublet_clones
+                    clone1 = self.clones[k1]
+                    clone2 = self.clones[k2]
+
+                    cn_A1 = clone1.cn_profile_A[b]
+                    cn_B1 = clone1.cn_profile_B[b]
+                    cn_A2 = clone2.cn_profile_A[b]
+                    cn_B2 = clone2.cn_profile_B[b]
+                    tcn = cn_A1 + cn_B1 + cn_A2 + cn_B2
+
+                    if tcn == 0:
+                        continue
+
+                    if hap_block.alternate_haplotype == Haplotype.A:
+                        cn_alt = cn_A1 + cn_A2
+                    else:
+                        cn_alt = cn_B1 + cn_B2
+
+                    p_alt = cn_alt / (tcn + 1e-10)
+                    depth_mean = cell.allelic_coverage * snp_count * (tcn / 2.0)
+                else:
+                    clone = self.clones[cell.clone_assignment]
+                    cn_A = clone.cn_profile_A[b]
+                    cn_B = clone.cn_profile_B[b]
+                    tcn = cn_A + cn_B
+
+                    if tcn == 0:
+                        continue
+
+                    if hap_block.alternate_haplotype == Haplotype.A:
+                        p_alt = cn_A / (tcn + 1e-10)
+                    else:
+                        p_alt = cn_B / (tcn + 1e-10)
+
+                    depth_mean = cell.allelic_coverage * snp_count * (tcn / 2.0)
+
+                total_depth = int(self.rng.poisson(depth_mean))
+                if total_depth == 0:
+                    continue
+
+                if hap_block.orientation == -1:
+                    p_alt = 1.0 - p_alt
+
+                alt_depth = self._sample_bin_alternate_count(total_depth, p_alt, int(snp_count))
+                ref_depth = total_depth - alt_depth
+
+                alternate_counts[n, b] = alt_depth
+                reference_counts[n, b] = ref_depth
+                total_counts[n, b] = total_depth
+
+            cell.allele_counts = (
+                alternate_counts[n, :],
+                reference_counts[n, :],
+                total_counts[n, :]
+            )
+
+        return alternate_counts, reference_counts, total_counts
+
+
     def _detect_segments_from_clones(self):
         """
         Detect segment boundaries from clone CN profiles.
@@ -809,8 +1044,14 @@ class HaploTreeSimulator:
         """
         from .segment_detector import SegmentDetector
         
-        detector = SegmentDetector(num_bins=self.config.num_bins)
-        self.segments = detector.detect_segments(self.clones)
+        detector = SegmentDetector(
+            num_bins=self.config.num_bins,
+            bin_width=self.config.bin_width,
+            mandatory_breakpoints=self.chromosome_boundary_bins,
+            bin_lengths=[bin_obj.length for bin_obj in self.bins],
+        )
+        leaf_clones = [self.clones[i] for i in self._leaf_clone_indices]
+        self.segments = detector.detect_segments(leaf_clones)
         
         # Update bin_to_segment mapping
         self.bin_to_segment = {}
@@ -833,46 +1074,32 @@ class HaploTreeSimulator:
         For single chromosome: H = 2 (p-arm and q-arm)
         Phase orientation sampled once per arm with probability p_switch.
         """
-        from .chromosome_data import get_arm_boundaries
-        
         if len(self.segments) == 0:
             return
-        
-        # Get chromosome arm boundaries
-        p_end, q_start = get_arm_boundaries(self.config.chromosome)
-        p_arm_end_bin = p_end // self.config.bin_width
-        q_arm_start_bin = q_start // self.config.bin_width
-        
-        # Create two blocks: one for p-arm, one for q-arm
+
         self.haplotype_blocks = []
-        
-        for arm_idx in range(2):  # 0=p-arm, 1=q-arm
-            # Sample orientation (Equation 51)
-            # η_h = -1 with probability p_switch, else +1
+        self.bin_to_block = {}
+        self.segment_to_block = {}
+
+        for chromosome, arm, start_bin, end_bin in self.chromosome_arm_intervals:
             if self.rng.random() < self.config.prob_phase_switch:
                 orientation = -1
             else:
                 orientation = +1
-            
-            # Default: alternate haplotype is A
-            alternate_hap = Haplotype.A
-            
+
             hap_block = HaplotypeBlock(
-                index=arm_idx,
+                index=len(self.haplotype_blocks),
                 segment_indices=[],
                 orientation=orientation,
-                alternate_haplotype=alternate_hap
+                alternate_haplotype=Haplotype.A
             )
             self.haplotype_blocks.append(hap_block)
+
+            for bin_idx in range(start_bin, end_bin + 1):
+                self.bin_to_block[bin_idx] = hap_block.index
         
-        # Assign each segment to its arm block
         for segment in self.segments:
-            # Check if segment is in p-arm or q-arm based on its position
-            if segment.end_bin < p_arm_end_bin:
-                block_idx = 0  # p-arm
-            else:
-                block_idx = 1  # q-arm
-            
+            block_idx = self.bin_to_block.get(segment.start_bin, 0)
             segment.haplotype_block = block_idx
             self.haplotype_blocks[block_idx].segment_indices.append(segment.index)
             self.segment_to_block[segment.index] = block_idx
@@ -915,5 +1142,6 @@ class HaploTreeSimulator:
             "cn_profiles_A": cn_profiles_A,
             "cn_profiles_B": cn_profiles_B,
             "segments": self.segments,
+            "bin_snp_counts": getattr(self, "bin_snp_counts", None),
             "events": events,
         }

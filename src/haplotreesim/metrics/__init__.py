@@ -6,12 +6,20 @@ from .hscn_metrics import (
     compute_hscn_error,
     compute_tcn_mse,
     compute_loh_metrics,
+    find_mirrored_subclone_triples,
     compute_mirrored_subclone_resolution,
     compute_all_hscn_metrics
 )
 
 from .breakpoint_metrics import (
-    compute_breakpoint_metrics
+    breakpoints_from_frequencies,
+    compute_breakpoint_metrics,
+    compute_breakpoint_sensitivity_curve,
+    compute_hscn_breakpoint_frequencies,
+    compute_recurrent_breakpoint_metrics,
+    compute_tcn_breakpoint_frequencies,
+    predicted_breakpoints_from_hscn,
+    predicted_breakpoints_from_tcn,
 )
 
 from .clone_metrics import (
@@ -34,9 +42,17 @@ __all__ = [
     'compute_hscn_error',
     'compute_tcn_mse',
     'compute_loh_metrics',
+    'find_mirrored_subclone_triples',
     'compute_mirrored_subclone_resolution',
     'compute_all_hscn_metrics',
+    'breakpoints_from_frequencies',
     'compute_breakpoint_metrics',
+    'compute_breakpoint_sensitivity_curve',
+    'compute_hscn_breakpoint_frequencies',
+    'compute_recurrent_breakpoint_metrics',
+    'compute_tcn_breakpoint_frequencies',
+    'predicted_breakpoints_from_hscn',
+    'predicted_breakpoints_from_tcn',
     'compute_contingency_matrix',
     'hungarian_matching',
     'compute_ari',

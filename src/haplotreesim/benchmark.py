@@ -25,8 +25,8 @@ def _json_serialize(obj):
         return obj.tolist()
     elif isinstance(obj, (np.integer,)):
         return int(obj)
-    elif isinstance(obj, (np.floating,)):
-        return float(obj)
+    elif isinstance(obj, (float, np.floating)):
+        return float(obj) if np.isfinite(obj) else None
     elif isinstance(obj, np.bool_):
         return bool(obj)
     elif isinstance(obj, dict):
@@ -44,6 +44,14 @@ def _json_serialize(obj):
         }
     else:
         return obj
+
+
+def _format_metric(value):
+    if value is None:
+        return "NA"
+    if isinstance(value, (float, np.floating)) and not np.isfinite(value):
+        return "NA"
+    return f"{float(value):.4f}"
 
 
 @dataclass
@@ -180,7 +188,12 @@ class BenchmarkRunner:
         ground_truth['cn_B'] = cn_B
         ground_truth['clone_labels'] = np.array(ground_truth['clone_assignments'])
 
-        breakpoints = [seg.start_bin for seg in ground_truth['segments'][1:]]
+        interchromosome_breakpoints = set(getattr(sim, 'chromosome_boundary_bins', []))
+        breakpoints = [
+            seg.start_bin
+            for seg in ground_truth['segments'][1:]
+            if seg.start_bin not in interchromosome_breakpoints
+        ]
         ground_truth['breakpoints'] = np.array(breakpoints)
 
         return {
@@ -272,8 +285,9 @@ class BenchmarkRunner:
         if 'hscn' in metrics:
             hscn = metrics['hscn']
             print(f"     HSCN Error: {hscn['hscn_error']:.4f}")
-            print(f"     LOH F1: {hscn['loh_f1']:.4f}")
-            print(f"     MSR: {hscn['msr']:.4f}")
+            print(f"     LOH F1: {_format_metric(hscn['loh_f1'])}")
+            print(f"     n_mirrored_triples: {hscn.get('n_mirrored_triples', 'NA')}")
+            print(f"     MSR: {_format_metric(hscn['msr'])}")
 
         if 'breakpoints' in metrics:
             bp = metrics['breakpoints']

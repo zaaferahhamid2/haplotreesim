@@ -12,6 +12,8 @@ HaploTreeSim is a simulator for generating synthetic single-cell DNA sequencing 
 
 - [Installation](#installation)
 - [Running End-to-End](#running-end-to-end)
+- [Current Pipeline Updates](#current-pipeline-updates)
+- [SEACON Pipeline](#seacon-pipeline)
 - [Parameter Configuration](#parameter-configuration)
 - [Input Format](#input-format)
 - [Expected Output](#expected-output)
@@ -85,6 +87,103 @@ for clone in sim.clones:
 ```bash
 python3 examples/run_benchmark_example.py
 ```
+
+---
+
+## Current Pipeline Updates
+
+### Pipeline Additions
+
+- File-based external-tool workflow.
+- Dataset simulator writes reusable on-disk outputs.
+- Tool adapters convert saved datasets into method-specific inputs.
+- Method runners execute external callers such as SEACON.
+- Evaluators compare method outputs against saved simulator truth.
+
+### Simulator Changes
+
+- Supports single-chromosome, multi-chromosome, and whole-genome simulation.
+- Exports bins, segments, cells, read-count matrices, and RDR matrices.
+- Exports allele-count matrices and segment-level allele-count summaries.
+- Exports clone-level haplotype CN truth and cell-segment HSCN truth.
+- Exports event tables, metadata, and reusable tree structure.
+
+### Event Model Changes
+
+- CNA events are generated in order along clone-tree edges.
+- Gains and losses are validated against the current haplotype-specific CN state.
+- Focal, arm-level, and chromosome-level events support whole-genome coordinates.
+- Focal event length now uses `focal_length_min`.
+- Focal event maximum length now uses `focal_length_max_fraction`.
+- The old hardcoded focal length range has been removed.
+
+### Metrics / Evaluation Changes
+
+- Evaluation reads saved datasets directly.
+- Truth is loaded from exported files instead of regenerated from a seed.
+- SEACON calls can be parsed from segment-style or flat outputs.
+- Predictions are mapped back to simulator bins and true segments.
+- Reports HSCN error and LOH precision/recall/F1.
+- Reports recurrent breakpoint metrics and breakpoint sensitivity curves.
+- Reports clone assignment metrics.
+
+---
+
+## SEACON Pipeline
+
+The current SEACON workflow is file-based. First simulate a general HaploTreeSim dataset, then convert it into SEACON input files, run SEACON, and evaluate the SEACON calls against the saved simulator truth.
+
+### 1. Simulate a dataset
+
+```bash
+python scripts/simulate_dataset.py \
+  --output-dir examples/whole_genome_simulation \
+  --whole-genome \
+  --num-clones 5 \
+  --num-cells 100 \
+  --lambda-events 5 \
+  --lambda-amplitude 1 \
+  --random-seed 42 \
+  --overwrite
+```
+
+This writes the general dataset: bins, segments, cells, read counts, RDR, allele counts, clone CN truth, cell-segment HSCN truth, events, metadata, and tree structure.
+
+### 2. Convert to SEACON input
+
+```bash
+python scripts/convert_to_seacon.py \
+  --input-dir examples/whole_genome_simulation \
+  --overwrite
+```
+
+This creates `examples/whole_genome_simulation/seacon_input/` with `RDR.tsv`, `readcounts.tsv`, `filtered_regions.bed`, `cells.txt`, and `precomputed_baf.tsv`.
+
+### 3. Run SEACON
+
+```bash
+python scripts/run_seacon.py \
+  --input-dir examples/whole_genome_simulation/seacon_input \
+  --output-dir examples/whole_genome_simulation/seacon_output \
+  --upper-filter 5 \
+  --tolerance 0.15 \
+  --max-wgd 1 \
+  --max-cn 10 \
+  --num-processors 1 \
+  --overwrite
+```
+
+Use `--seacon-bin /path/to/seacon` if the `seacon` executable is not on your `PATH`.
+
+### 4. Evaluate SEACON
+
+```bash
+python scripts/evaluate_seacon.py \
+  --dataset-dir examples/whole_genome_simulation \
+  --seacon-output-dir examples/whole_genome_simulation/seacon_output
+```
+
+The evaluator writes `evaluation_metrics.json` in the SEACON output directory and reports HSCN error, LOH precision/recall/F1, breakpoint metrics, and clone assignment metrics.
 
 ---
 

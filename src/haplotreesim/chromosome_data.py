@@ -34,6 +34,26 @@ HG38_CHROMOSOME_LENGTHS = {
     'chrY': 57227415,
 }
 
+AUTOSOMES = [f'chr{i}' for i in range(1, 23)]
+SEX_CHROMOSOMES = ['chrX', 'chrY']
+WHOLE_GENOME_CHROMOSOMES = AUTOSOMES + SEX_CHROMOSOMES
+
+
+def normalize_chromosomes(chromosomes) -> list:
+    """Normalize a chromosome or chromosome list and validate hg38 names."""
+    if isinstance(chromosomes, str):
+        normalized = [chromosomes]
+    else:
+        normalized = list(chromosomes)
+
+    if not normalized:
+        raise ValueError("At least one chromosome must be specified")
+
+    for chromosome in normalized:
+        get_chromosome_length(chromosome)
+
+    return normalized
+
 
 def get_chromosome_length(chromosome: str) -> int:
     """Get the length of a chromosome in base pairs."""
@@ -47,6 +67,16 @@ def create_bins_for_chromosome(chromosome: str, bin_width: int) -> int:
     length = get_chromosome_length(chromosome)
     num_bins = (length + bin_width - 1) // bin_width
     return num_bins
+
+
+def create_bins_for_chromosomes(chromosomes, bin_width: int) -> int:
+    """Calculate total bins needed for a chromosome list."""
+    return sum(create_bins_for_chromosome(chromosome, bin_width) for chromosome in normalize_chromosomes(chromosomes))
+
+
+def get_genome_length(chromosomes) -> int:
+    """Return total reference length for a chromosome list."""
+    return sum(get_chromosome_length(chromosome) for chromosome in normalize_chromosomes(chromosomes))
 
 
 def get_arm_boundaries(chromosome: str) -> tuple:

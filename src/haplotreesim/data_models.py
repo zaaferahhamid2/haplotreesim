@@ -116,12 +116,16 @@ class CNAEvent:
         haplotype: Which haplotype is affected (γ ∈ {A, B, WGD} in paper)
         amplitude: Magnitude of gain/loss (Δ in paper, ignored for WGD)
         event_id: Unique identifier for this event
+        event_time: Within-edge event time for ordered CNA replay
+        scale_class: Event scale class (focal, arm, chr) for non-WGD events
     """
     start_bin: int
     end_bin: int
     haplotype: Haplotype
     amplitude: int = 0  # Ignored if haplotype == WGD
     event_id: Optional[str] = None
+    event_time: Optional[float] = None
+    scale_class: Optional[str] = None
     
     def __post_init__(self):
         """Validate event properties."""
@@ -242,8 +246,8 @@ class Cell:
         library_size: Library size factor (α_n in paper)
         allelic_coverage: Allelic coverage factor (β_n in paper)
         read_counts: Read depth counts per bin (x_{n,b} in paper), shape (B,)
-        allele_counts: Tuple of (alternate, reference, total) counts per segment
-                      (a_{n,s}, r_{n,s}, t_{n,s} in paper), each shape (S,)
+        allele_counts: Tuple of (alternate, reference, total) counts per bin
+                      (a_{n,b}, r_{n,b}, t_{n,b} in paper), each shape (B,)
         is_normal: Whether this is a normal diploid cell
         is_doublet: Whether this is a doublet (fusion of two cells)
         doublet_clones: If doublet, the two clone indices involved
@@ -253,7 +257,7 @@ class Cell:
     library_size: float
     allelic_coverage: float
     read_counts: Optional[np.ndarray] = None  # Shape: (B,)
-    allele_counts: Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]] = None  # (a, r, t), each (S,)
+    allele_counts: Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]] = None  # (a, r, t), each (B,)
     is_normal: bool = False
     is_doublet: bool = False
     doublet_clones: Optional[Tuple[int, int]] = None
@@ -280,7 +284,8 @@ class SimulationConfig:
     
     # Genome representation (Section 3.1)
     # Real chromosome mode (hg38)
-    chromosome: str = "chr1"  # Which chromosome to simulate
+    chromosome: str = "chr1"  # Backward-compatible single-chromosome selector
+    chromosomes: Optional[List[str]] = None  # Chromosomes to simulate; defaults to [chromosome]
     bin_width: int = 500000  # Bin width in base pairs (500 kb default)
     
     # Legacy parameters (computed automatically from chromosome)
@@ -298,9 +303,8 @@ class SimulationConfig:
     beta_tree: float = 0.3   # Beta distribution β parameter (smaller = more imbalanced)  # "diploid" or "wgd" - root initialization
     
     # CNA event model (Section 3.4)
-    lambda_events: float = 1.5  # λ_E: mean number of events per edge
+    lambda_events: float = 5  # λ_E: mean number of events per edge
     lambda_amplitude: float = 1.0  # λ_Δ: parameter for amplitude distribution
-    prob_wgd: float = 0.0  # p_WGD: probability of WGD event
     prob_mirror: float = 0.0  # p_mirror: probability of mirrored subclones
     gain_prob: float = 0.40  # 60% losses (losses predominate in solid tumors)
     
@@ -309,7 +313,7 @@ class SimulationConfig:
     prob_arm_given_broad: float = 0.75  # q_arm: arm probability among broad events
     
     # Focal event length distribution (Equation 24)
-    focal_length_min: float = 0.5e6  # L_min: 0.5 Mb minimum
+    focal_length_min: float = 1e6  # L_min: 0.5 Mb minimum
     focal_length_max_fraction: float = 0.5  # Max = 0.5 * arm_length
     
     # Haplotype selection (Equation 28)
@@ -327,10 +331,13 @@ class SimulationConfig:
     
     # Allelic observation model (Section 3.6)
     snp_density: float = 0.001  # ρ_SNP: heterozygous SNPs per bp
-    mean_allelic_coverage: float = 50.0  # Mean value for β_n
+    mean_allelic_coverage: Optional[float] = None  # Mean value for β_n; auto-calibrated if None
     allelic_coverage_cv: float = 0.3  # Coefficient of variation for allelic coverage
-    nu_a: float = 20.0  # Concentration parameter for Beta-Binomial
+    nu_a: float = 20.0  # Per-evidence concentration scale for Beta-Binomial
+    allelic_concentration_scale: str = "snps"  # "snps": ν_a M_b, "depth": ν_a t_{n,b}
+    disable_allelic_beta: bool = False  # Debug mode: sample Binomial(t_{n,b}, p_{n,b}) directly
     prob_phase_switch: float = 0.01  # p_switch: phase switch probability
+    max_event_attempts: int = 50  # Max attempts to draw one valid state-dependent event
     
     # Additional observation model parameters (Equations 50, 52)
     epsilon_seq: float = 0.001  # Sequencing error contamination
@@ -346,11 +353,21 @@ class SimulationConfig:
     def __post_init__(self):
         """Validate configuration parameters."""
         # Import here to avoid circular dependency
-        from .chromosome_data import get_chromosome_length, create_bins_for_chromosome
+        from .chromosome_data import (
+            create_bins_for_chromosomes,
+            get_genome_length,
+            normalize_chromosomes,
+        )
         
-        # Compute genome parameters from chromosome
-        chrom_length = get_chromosome_length(self.chromosome)
-        computed_bins = create_bins_for_chromosome(self.chromosome, self.bin_width)
+        # Compute genome parameters from the requested chromosome set.
+        selected_chromosomes = normalize_chromosomes(
+            self.chromosomes if self.chromosomes is not None else [self.chromosome]
+        )
+        object.__setattr__(self, 'chromosomes', selected_chromosomes)
+        object.__setattr__(self, 'chromosome', selected_chromosomes[0])
+
+        genome_length = get_genome_length(selected_chromosomes)
+        computed_bins = create_bins_for_chromosomes(selected_chromosomes, self.bin_width)
         
         # Set computed values if not provided
         if self.num_bins is None:
@@ -358,16 +375,30 @@ class SimulationConfig:
         if self.bin_length is None:
             object.__setattr__(self, 'bin_length', self.bin_width)
         if self.genome_length is None:
-            object.__setattr__(self, 'genome_length', chrom_length)
+            object.__setattr__(self, 'genome_length', genome_length)
+        if self.mean_allelic_coverage is None:
+            snps_per_bin = self.snp_density * self.bin_width
+            if snps_per_bin <= 0:
+                raise ValueError("snp_density * bin_width must be positive for auto allelic coverage")
+            object.__setattr__(
+                self,
+                'mean_allelic_coverage',
+                self.mean_library_size / snps_per_bin
+            )
         
         assert self.num_bins > 0, "num_bins must be positive"
         assert self.num_clones > 0, "num_clones must be positive"
         assert self.num_cells > 0, "num_cells must be positive"
-        assert self.root_type in ["diploid", "wgd"], "root_type must be 'diploid' or 'wgd'"
+        assert self.root_type in ["diploid"], "root_type must be 'diploid'"
         assert 0 <= self.prob_normal <= 1, "prob_normal must be in [0, 1]"
         assert 0 <= self.prob_doublet <= 1, "prob_doublet must be in [0, 1]"
         assert 0 <= self.prob_wgd <= 1, "prob_wgd must be in [0, 1]"
         assert 0 <= self.prob_mirror <= 1, "prob_mirror must be in [0, 1]"
+        assert self.mean_allelic_coverage > 0, "mean_allelic_coverage must be positive"
+        assert self.nu_a > 0, "nu_a must be positive"
+        assert self.allelic_concentration_scale in {"snps", "depth"}, \
+            "allelic_concentration_scale must be 'snps' or 'depth'"
+        assert self.max_event_attempts > 0, "max_event_attempts must be positive"
     
     def get_root_cn(self) -> Tuple[int, int]:
         """
@@ -378,5 +409,3 @@ class SimulationConfig:
         """
         if self.root_type == "diploid":
             return (1, 1)
-        else:  # wgd
-            return (2, 2)

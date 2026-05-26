@@ -19,14 +19,26 @@ class SegmentDetector:
     copy number changepoint.
     """
     
-    def __init__(self, num_bins: int):
+    def __init__(
+        self,
+        num_bins: int,
+        bin_width: int = 1,
+        mandatory_breakpoints=None,
+        bin_lengths=None,
+    ):
         """
         Initialize the segment detector.
         
         Args:
             num_bins: Total number of genomic bins
+            bin_width: Width of each bin in base pairs
         """
         self.num_bins = num_bins
+        self.bin_width = bin_width
+        self.mandatory_breakpoints = set(mandatory_breakpoints or [])
+        self.bin_lengths = None if bin_lengths is None else np.asarray(bin_lengths, dtype=int)
+        if self.bin_lengths is not None and self.bin_lengths.shape != (self.num_bins,):
+            raise ValueError("bin_lengths must have length num_bins")
     
     def detect_segments(self, clones: List[Clone]) -> List[Segment]:
         """
@@ -62,6 +74,11 @@ class SegmentDetector:
             Set of bin indices where breakpoints occur
         """
         breakpoints = {0, self.num_bins}  # Always include start and end
+        breakpoints.update(
+            breakpoint
+            for breakpoint in self.mandatory_breakpoints
+            if 0 <= breakpoint <= self.num_bins
+        )
         
         for clone in clones:
             # Find breakpoints in haplotype A
@@ -103,16 +120,18 @@ class SegmentDetector:
             # Create bin set for this segment
             bin_indices = set(range(start_bin, end_bin + 1))
             
-            # Calculate segment length (in bins)
-            # Length in bp would be: len(bin_indices) * bin_length
-            segment_length = len(bin_indices)
+            # Segment length is stored in base pairs for the allele-count model.
+            if self.bin_lengths is None:
+                segment_length = len(bin_indices) * self.bin_width
+            else:
+                segment_length = int(self.bin_lengths[start_bin:end_bin + 1].sum())
             
             segment = Segment(
                 index=len(segments),
                 bin_indices=bin_indices,
                 start_bin=start_bin,
                 end_bin=end_bin,
-                length=segment_length,  # For now, just bin count
+                length=segment_length,
                 haplotype_block=0  # Will be assigned later
             )
             
