@@ -42,8 +42,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--overwrite", action="store_true", help="Replace output-dir if it exists.")
     parser.add_argument("--seacon-bin", default="seacon", help="SEACON executable name or path.")
-    parser.add_argument("--upper-filter", type=int, default=5)
-    parser.add_argument("--tolerance", type=float, default=0.15)
+    parser.add_argument("--upper-filter", type=int, default=20)
+    parser.add_argument("--tolerance", type=float, default=0.05)
     parser.add_argument("--max-wgd", type=int, default=1)
     parser.add_argument("--max-cn", type=int, default=10)
     parser.add_argument("--num-processors", type=int, default=1)
@@ -69,20 +69,27 @@ def main() -> None:
     ensure_clean_dir(output_dir, overwrite=args.overwrite)
     stage_inputs(input_dir, output_dir)
 
-    prep_command = [
-        args.seacon_bin,
-        "prep_baf",
-        "-o",
-        str(output_dir),
-        "-i",
-        ".",
-        "--precomputed-baf",
-        str(output_dir / "precomputed_baf.tsv"),
-        "--no-normal",
-        "-P",
-        str(args.num_processors),
-    ]
-    run_command(prep_command)
+    # Write BAF.tsv directly from precomputed_baf.tsv (flat cell x bin format)
+    # This bypasses prep_baf which requires BAM files
+    import numpy as np
+    rdr = pd.read_csv(output_dir / "RDR.tsv", sep="\t", index_col=0)
+    cell_names = rdr.index.tolist()
+    n_bins = rdr.shape[1]
+    baf_in = pd.read_csv(output_dir / "precomputed_baf.tsv", sep="\t")
+    regions = pd.read_csv(output_dir / "filtered_regions.bed", sep="\t",
+                          header=None, names=["chrom", "start", "end"])
+    baf_mat = pd.DataFrame(0.5, index=cell_names, columns=list(range(n_bins)))
+    for _, row in baf_in.iterrows():
+        match = regions[(regions["chrom"] == row["chrom"]) &
+                        ((regions["start"] == row["start"] + 1) |
+                         (regions["start"] == row["start"]))]
+        if len(match) == 0:
+            continue
+        bin_idx = match.index[0]
+        if row["cell"] in baf_mat.index:
+            baf_mat.loc[row["cell"], bin_idx] = row["BAF"]
+    baf_mat.to_csv(output_dir / "BAF.tsv", sep="\t")
+    print(f"Wrote BAF.tsv: {baf_mat.shape}")
 
     call_command = [
         args.seacon_bin,
