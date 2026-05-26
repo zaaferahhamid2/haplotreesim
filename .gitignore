@@ -48,3 +48,10 @@ understand_simulation.py
 read_counts.npy
 *.temp
 seacon_output*/
+alleloscope_output*/
+seacon_output*/
+benchmark_results/
+*.pkl
+*.docx
+*.pdf
+~$*
