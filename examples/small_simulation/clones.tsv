@@ -1,0 +1,10 @@
+clone	clone_index	parent_clone_index	is_root	ploidy
+clone0	0		True	2.0
+clone1	1	0.0	False	2.038152610441767
+clone2	2	0.0	False	2.4899598393574296
+clone3	3	2.0	False	2.4899598393574296
+clone4	4	2.0	False	2.4899598393574296
+clone5	5	1.0	False	2.038152610441767
+clone6	6	1.0	False	2.032128514056225
+clone7	7	6.0	False	2.032128514056225
+clone8	8	6.0	False	2.032128514056225

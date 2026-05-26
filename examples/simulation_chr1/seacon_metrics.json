@@ -1,0 +1,75 @@
+{
+  "hscn_error": 0.206875,
+  "loh_precision": 0.9753086419753086,
+  "loh_recall": 0.6220472440944882,
+  "loh_f1": 0.7596153846153845,
+  "loh_n_true": 127,
+  "loh_n_pred": 81,
+  "msr": 0.3333333333333333,
+  "n_mirrored_triples": 9,
+  "breakpoint_precision": 0.75,
+  "breakpoint_recall": 0.8571428571428571,
+  "breakpoint_f1": 0.7999999999999999,
+  "breakpoint_threshold": 0.05,
+  "breakpoint_n_true": 7,
+  "breakpoint_n_pred": 8,
+  "breakpoint_sensitivity": {
+    "0.01": {
+      "precision": 0.125,
+      "recall": 1.0,
+      "f1": 0.2222222222222222,
+      "tp": 7,
+      "fp": 49,
+      "fn": 0,
+      "n_pred": 56
+    },
+    "0.05": {
+      "precision": 0.75,
+      "recall": 0.8571428571428571,
+      "f1": 0.7999999999999999,
+      "tp": 6,
+      "fp": 2,
+      "fn": 1,
+      "n_pred": 8
+    },
+    "0.1": {
+      "precision": 1.0,
+      "recall": 0.2857142857142857,
+      "f1": 0.4444444444444445,
+      "tp": 2,
+      "fp": 0,
+      "fn": 5,
+      "n_pred": 2
+    },
+    "0.2": {
+      "precision": 1.0,
+      "recall": 0.14285714285714285,
+      "f1": 0.25,
+      "tp": 1,
+      "fp": 0,
+      "fn": 6,
+      "n_pred": 1
+    }
+  },
+  "clone_ari": 0.45411446933896665,
+  "clone_nmi": 0.44378322004439535,
+  "true_breakpoints": [
+    47,
+    75,
+    81,
+    84,
+    87,
+    90,
+    244
+  ],
+  "pred_breakpoints": [
+    47,
+    75,
+    84,
+    87,
+    90,
+    243,
+    244,
+    245
+  ]
+}

@@ -1,0 +1,5 @@
+clone	clone_index	parent_clone_index	event_order	chrom	start_bin	end_bin	haplotype	amplitude	event_time	scale_class	event_id
+clone1	1	0	0	chr1	75	89	B	-1	0.06383607611164518	focal	B_75_89_-1
+clone1	1	0	1	chr1	47	80	A	1	0.08091190490888764	focal	A_47_80_1
+clone2	2	0	0	chr1	0	243	B	1	0.12403748499158658	arm	B_0_243_1
+clone6	6	1	0	chr1	84	86	A	-1	0.05757103491191189	focal	A_84_86_-1

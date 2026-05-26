@@ -152,12 +152,22 @@ class HaploTreeSimulator:
             # A fixed tree defines its extant leaf count.
             self.config.num_clones = int(tree_data['num_clones'])
         
-        # Recreate tree nodes
-        from .beta_tree_builder import TreeNode
+        # Simply store the tree data - we'll recreate nodes later
+        self._imported_tree_data = tree_data
+        self._clone_proportions = np.array(tree_data['clone_proportions'])
+        self._leaf_clone_indices = tree_data['leaf_clone_indices']
+        
+        # Create minimal tree node objects for compatibility
+        class SimpleTreeNode:
+            def __init__(self, node_id, parent_id, edge_length, is_leaf):
+                self.node_id = node_id
+                self.parent_id = parent_id
+                self.edge_length = edge_length
+                self.is_leaf = is_leaf
         
         self._tree_nodes = []
         for node_data in tree_data['nodes']:
-            node = TreeNode(
+            node = SimpleTreeNode(
                 node_id=node_data['node_id'],
                 parent_id=node_data['parent_id'],
                 interval=tuple(node_data.get('interval', (0.0, 0.0))),
@@ -167,9 +177,6 @@ class HaploTreeSimulator:
                 is_leaf=node_data['is_leaf']
             )
             self._tree_nodes.append(node)
-        
-        self._clone_proportions = np.array(tree_data['clone_proportions'])
-        self._leaf_clone_indices = tree_data['leaf_clone_indices']
         
         print(f"✓ Tree structure imported from: {filepath}")
         print(f"  Nodes: {len(self._tree_nodes)}, Leaves: {len([n for n in self._tree_nodes if n.is_leaf])}")

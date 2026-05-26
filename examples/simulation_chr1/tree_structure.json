@@ -1,0 +1,129 @@
+{
+  "num_clones": 5,
+  "alpha_tree": 0.5,
+  "beta_tree": 0.3,
+  "nodes": [
+    {
+      "node_id": 0,
+      "parent_id": -1,
+      "interval": [
+        0.0,
+        1.0
+      ],
+      "perc": 1.0,
+      "edge_length": 0.17733287556874125,
+      "depth": 1,
+      "is_leaf": false
+    },
+    {
+      "node_id": 1,
+      "parent_id": 0,
+      "interval": [
+        0.0,
+        0.19300349217837784
+      ],
+      "perc": 0.19300349217837784,
+      "edge_length": 0.17231584183581014,
+      "depth": 2,
+      "is_leaf": false
+    },
+    {
+      "node_id": 2,
+      "parent_id": 0,
+      "interval": [
+        0.19300349217837784,
+        1.0
+      ],
+      "perc": 0.8069965078216221,
+      "edge_length": 0.1758984328374318,
+      "depth": 2,
+      "is_leaf": false
+    },
+    {
+      "node_id": 3,
+      "parent_id": 2,
+      "interval": [
+        0.19300349217837784,
+        0.9132624015482744
+      ],
+      "perc": 0.7202589093698966,
+      "edge_length": 0.02063744631195776,
+      "depth": 3,
+      "is_leaf": true
+    },
+    {
+      "node_id": 4,
+      "parent_id": 2,
+      "interval": [
+        0.9132624015482744,
+        1.0
+      ],
+      "perc": 0.08673759845172557,
+      "edge_length": 0.006375566837217195,
+      "depth": 3,
+      "is_leaf": true
+    },
+    {
+      "node_id": 5,
+      "parent_id": 1,
+      "interval": [
+        0.0,
+        0.05928775775711205
+      ],
+      "perc": 0.05928775775711205,
+      "edge_length": 0.10714730246385304,
+      "depth": 3,
+      "is_leaf": true
+    },
+    {
+      "node_id": 6,
+      "parent_id": 1,
+      "interval": [
+        0.05928775775711205,
+        0.19300349217837784
+      ],
+      "perc": 0.1337157344212658,
+      "edge_length": 0.10399779118132246,
+      "depth": 3,
+      "is_leaf": false
+    },
+    {
+      "node_id": 7,
+      "parent_id": 6,
+      "interval": [
+        0.05928775775711205,
+        0.11429758951017899
+      ],
+      "perc": 0.05500983175306696,
+      "edge_length": 0.23044605413555447,
+      "depth": 4,
+      "is_leaf": true
+    },
+    {
+      "node_id": 8,
+      "parent_id": 6,
+      "interval": [
+        0.11429758951017899,
+        0.19300349217837784
+      ],
+      "perc": 0.07870590266819885,
+      "edge_length": 0.005848688828111913,
+      "depth": 4,
+      "is_leaf": true
+    }
+  ],
+  "clone_proportions": [
+    0.7202589093698966,
+    0.08673759845172557,
+    0.05928775775711205,
+    0.05500983175306696,
+    0.07870590266819885
+  ],
+  "leaf_clone_indices": [
+    3,
+    4,
+    5,
+    7,
+    8
+  ]
+}

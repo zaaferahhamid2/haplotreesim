@@ -1,0 +1,15 @@
+{
+  "source_dataset": "examples/small_simulation",
+  "format": "seacon-input",
+  "num_regions": 498,
+  "baf_imputation": "same_clone_median",
+  "files": {
+    "cells": "cells.txt",
+    "regions": "filtered_regions.bed",
+    "readcounts": "readcounts.tsv",
+    "rdr": "RDR.tsv",
+    "precomputed_baf": "precomputed_baf.tsv"
+  },
+  "observed_baf_rows": 49800,
+  "imputed_bin_cell_baf": 39
+}
