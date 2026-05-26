@@ -95,11 +95,9 @@ def write_precomputed_baf(
                 clone = clones_by_cell[str(cell)]
                 clone_observed = observed_by_clone.get(clone, [])
                 if not clone_observed:
-                    raise ValueError(
-                        f"Cannot impute BAF for {cell} bin {bin_idx}: "
-                        "no positive-depth cells in the same clone."
-                    )
-                baf = round(float(np.median(clone_observed)), 5)
+                    baf = 0.5  # fallback: no depth in clone, assume balanced
+                else:
+                    baf = round(float(np.median(clone_observed)), 5)
             else:
                 raw_baf = alt / total
                 baf = round(float(min(raw_baf, 1 - raw_baf)), 5)
