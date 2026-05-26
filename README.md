@@ -165,8 +165,8 @@ This creates `examples/whole_genome_simulation/seacon_input/` with `RDR.tsv`, `r
 python scripts/run_seacon.py \
   --input-dir examples/whole_genome_simulation/seacon_input \
   --output-dir examples/whole_genome_simulation/seacon_output \
-  --upper-filter 5 \
-  --tolerance 0.15 \
+  --upper-filter 20 \
+  --tolerance 0.05 \
   --max-wgd 1 \
   --max-cn 10 \
   --num-processors 1 \
