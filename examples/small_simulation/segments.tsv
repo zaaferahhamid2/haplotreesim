@@ -1,9 +1,0 @@
-segment	chrom	start_bin	end_bin	length_bp	haplotype_block
-0	chr1	0	46	23500000	0
-1	chr1	47	74	14000000	0
-2	chr1	75	80	3000000	0
-3	chr1	81	83	1500000	0
-4	chr1	84	86	1500000	0
-5	chr1	87	89	1500000	0
-6	chr1	90	243	77000000	0
-7	chr1	244	497	126956422	1
