@@ -96,14 +96,20 @@ loh_recall    <- if (tp+fn > 0) tp/(tp+fn) else NA
 loh_f1        <- if (!is.na(loh_precision) && !is.na(loh_recall) && (loh_precision+loh_recall)>0)
     2*loh_precision*loh_recall/(loh_precision+loh_recall) else NA
 
-# Clone ARI (simple: use total CN profile for clustering)
-tcn_pred <- cn_A_pred + cn_B_pred
-if (requireNamespace("mclust", quietly=TRUE)) {
-    ari <- mclust::adjustedRandIndex(clone_labels, 
-           kmeans(tcn_pred, centers=length(unique(clone_labels)), nstart=10)$cluster)
+# Clone ARI - only use cells present in Alleloscope output
+pred_cell_names <- rownames(gv)
+common_cells <- intersect(cell_names, pred_cell_names)
+cat('  Cells with predictions:', length(common_cells), '\n')
+cell_mask <- cell_names %in% common_cells
+clone_labels_sub <- clone_labels[cell_mask]
+tcn_pred_sub <- (cn_A_pred + cn_B_pred)[cell_mask, , drop=FALSE]
+n_centers <- min(length(unique(clone_labels_sub)), nrow(unique(tcn_pred_sub)))
+if (requireNamespace('mclust', quietly=TRUE) && n_centers >= 2) {
+    ari <- mclust::adjustedRandIndex(clone_labels_sub,
+           kmeans(tcn_pred_sub, centers=n_centers, nstart=10)$cluster)
 } else {
     ari <- NA
-    cat("  Note: install mclust for ARI\n")
+    cat('  Note: not enough distinct profiles for ARI\n')
 }
 
 cat("\n==================================================\n")

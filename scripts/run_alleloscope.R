@@ -12,6 +12,8 @@ output_dir <- args[which(args=="--output-dir") + 1]
 
 dir.create(output_dir, showWarnings=FALSE, recursive=TRUE)
 dir.create(paste0(output_dir,"/rds"), showWarnings=FALSE)
+dir.create(paste0(output_dir,"/rds/EMresults"), showWarnings=FALSE)
+dir.create(paste0(output_dir,"/plots/EMresults"), showWarnings=FALSE)
 dir.create(paste0(output_dir,"/plots"), showWarnings=FALSE)
 
 cat("Loading Alleloscope inputs from", input_dir, "\n")
