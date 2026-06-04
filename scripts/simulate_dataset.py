@@ -14,6 +14,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.io import mmwrite
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -55,12 +56,22 @@ def parse_args() -> argparse.Namespace:
         help="With --whole-genome, include chrX and chrY as well.",
     )
     parser.add_argument("--bin-width", type=int, default=500000)
+    parser.add_argument("--num-bins", type=int, default=None, help="Explicit bin count for single-chromosome synthetic runs.")
     parser.add_argument("--num-clones", type=int, default=4)
     parser.add_argument("--num-cells", type=int, default=100)
     parser.add_argument("--lambda-events", type=float, default=5)
     parser.add_argument("--lambda-amplitude", type=float, default=1.0)
     parser.add_argument("--prob-wgd", type=float, default=0.0)
     parser.add_argument("--prob-normal", type=float, default=0.0, help="Fraction of normal (diploid) cells.")
+    parser.add_argument("--prob-focal", type=float, default=0.7, help="Probability of focal CNA events.")
+    parser.add_argument(
+        "--prob-arm-given-broad",
+        type=float,
+        default=0.75,
+        help="Probability of arm-level events conditional on drawing a broad event.",
+    )
+    parser.add_argument("--snp-density", type=float, default=0.001, help="Usable heterozygous SNP density per bp.")
+    parser.add_argument("--mean-allelic-coverage", type=float, default=None, help="Mean per-SNP allelic coverage. Defaults to simulator auto-calibration.")
     parser.add_argument("--random-seed", type=int, default=42)
     return parser.parse_args()
 
@@ -113,12 +124,17 @@ def main() -> None:
         chromosome=chromosomes[0],
         chromosomes=chromosomes,
         bin_width=args.bin_width,
+        num_bins=args.num_bins,
         num_clones=args.num_clones,
         num_cells=args.num_cells,
         lambda_events=args.lambda_events,
         lambda_amplitude=args.lambda_amplitude,
         prob_wgd=args.prob_wgd,
         prob_normal=args.prob_normal,
+        prob_focal=args.prob_focal,
+        prob_arm_given_broad=args.prob_arm_given_broad,
+        snp_density=args.snp_density,
+        mean_allelic_coverage=args.mean_allelic_coverage,
         random_seed=args.random_seed,
     )
 
@@ -188,6 +204,21 @@ def main() -> None:
     write_matrix(output_dir / "clone_cn_A.tsv", truth["cn_profiles_A"], clone_names, bin_columns)
     write_matrix(output_dir / "clone_cn_B.tsv", truth["cn_profiles_B"], clone_names, bin_columns)
 
+    snps = pd.DataFrame({
+        "snp": np.arange(len(sim.snp_bins), dtype=int),
+        "chrom": sim.snp_chromosomes,
+        "position": sim.snp_positions,
+        "bin": sim.snp_bins,
+        "bin_local_snp": sim.snp_bin_local_indices,
+    })
+    snps.to_csv(output_dir / "snps.tsv", sep="\t", index=False)
+    pd.DataFrame({
+        "bin": np.arange(len(sim.bin_snp_counts), dtype=int),
+        "snp_count": sim.bin_snp_counts,
+    }).to_csv(output_dir / "bin_snp_counts.tsv", sep="\t", index=False)
+    mmwrite(output_dir / "snp_allele_alt.mtx", sim.snp_alt_counts)
+    mmwrite(output_dir / "snp_allele_ref.mtx", sim.snp_ref_counts)
+
     clone_rows = []
     for clone in sim.clones:
         clone_rows.append({
@@ -243,7 +274,8 @@ def main() -> None:
             for chrom, (start, end) in sim.chromosome_bin_offsets.items()
         },
         "interchromosome_breakpoints": [int(bp) for bp in sim.chromosome_boundary_bins],
-        "allele_count_unit": "bin",
+        "allele_count_unit": "snp-derived-bin",
+        "snp_count_unit": "snp",
         "coordinate_system": "1-based inclusive starts/ends in bins.tsv",
         "source_tree_structure": str(args.tree_structure) if args.tree_structure else None,
         "files": {
@@ -255,6 +287,10 @@ def main() -> None:
             "allele_alt": "allele_alt.tsv",
             "allele_ref": "allele_ref.tsv",
             "allele_total": "allele_total.tsv",
+            "snps": "snps.tsv",
+            "bin_snp_counts": "bin_snp_counts.tsv",
+            "snp_allele_alt": "snp_allele_alt.mtx",
+            "snp_allele_ref": "snp_allele_ref.mtx",
             "segment_allele_alt": "segment_allele_alt.tsv",
             "segment_allele_ref": "segment_allele_ref.tsv",
             "segment_allele_total": "segment_allele_total.tsv",

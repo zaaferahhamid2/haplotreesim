@@ -96,7 +96,6 @@ def main() -> None:
         "call",
         "-o",
         str(output_dir),
-        "--no-normal",
         "--upper-filter",
         str(args.upper_filter),
         "--tolerance",

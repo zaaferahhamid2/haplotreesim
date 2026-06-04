@@ -9,6 +9,7 @@ import numpy as np
 import json
 import pickle
 from typing import List, Tuple, Dict, Optional
+from scipy import sparse
 from .data_models import (
     Bin, Segment, HaplotypeBlock, CNAEvent, Clone, Cell,
     SimulationConfig, Haplotype
@@ -65,6 +66,13 @@ class HaploTreeSimulator:
         self.bin_to_block: Dict[int, int] = {}  # bin index -> haplotype block index
         self.segment_to_block: Dict[int, int] = {}  # segment index -> block index
         self.bin_snp_counts: Optional[np.ndarray] = None  # M_b for allelic simulation
+        self.snp_bin_offsets: Optional[np.ndarray] = None
+        self.snp_bins: Optional[np.ndarray] = None
+        self.snp_positions: Optional[np.ndarray] = None
+        self.snp_chromosomes: Optional[np.ndarray] = None
+        self.snp_bin_local_indices: Optional[np.ndarray] = None
+        self.snp_alt_counts = sparse.csr_matrix((0, config.num_cells), dtype=np.int32)
+        self.snp_ref_counts = sparse.csr_matrix((0, config.num_cells), dtype=np.int32)
 
     def _create_event_generator(self):
         """Create an event generator using the simulator's current genome layout."""
@@ -935,27 +943,96 @@ class HaploTreeSimulator:
         return alternate_counts, reference_counts, total_counts
     
 
-    def _sample_bin_alternate_count(self, total_depth: int, p_alt: float, snp_count: int) -> int:
+    def _sample_snp_alternate_counts(self, total_depths: np.ndarray, p_alt: float) -> np.ndarray:
         """
-        Sample alternate reads for one cell-bin observation.
+        Sample alternate reads for one cell-bin's SNP-level observations.
 
-        The default Beta-Binomial concentration is evidence-scaled by the
-        number of heterozygous SNPs in the bin. A sensitivity mode scales by
-        observed allelic depth, and a debug mode removes the Beta layer.
+        The default Beta-Binomial concentration is per-SNP when
+        allelic_concentration_scale is "snps"; summing many SNPs then naturally
+        increases evidence at the bin level. A sensitivity mode scales by each
+        SNP's observed allelic depth, and a debug mode removes the Beta layer.
         """
         p_alt = np.clip(p_alt, self.config.epsilon_floor, 1.0 - self.config.epsilon_floor)
         p_alt = (1.0 - self.config.epsilon_seq) * p_alt + self.config.epsilon_seq * 0.5
+        total_depths = np.asarray(total_depths, dtype=int)
+        alternate = np.zeros(total_depths.shape, dtype=np.int32)
+        positive = total_depths > 0
+        if not np.any(positive):
+            return alternate
 
         if self.config.disable_allelic_beta:
-            q_alt = p_alt
+            q_alt = np.full(int(np.sum(positive)), p_alt, dtype=float)
         else:
-            evidence = total_depth if self.config.allelic_concentration_scale == "depth" else snp_count
+            if self.config.allelic_concentration_scale == "depth":
+                evidence = total_depths[positive].astype(float)
+            else:
+                evidence = np.ones(int(np.sum(positive)), dtype=float)
             nu_eff = self.config.nu_a * evidence
             alpha_beta = p_alt * nu_eff
             beta_beta = (1.0 - p_alt) * nu_eff
             q_alt = self.rng.beta(alpha_beta, beta_beta)
 
-        return int(self.rng.binomial(total_depth, q_alt))
+        alternate[positive] = self.rng.binomial(total_depths[positive], q_alt)
+        return alternate
+
+    def _generate_snp_metadata(self) -> None:
+        """Generate usable heterozygous SNP positions and bin mappings."""
+        B = self.config.num_bins
+        self.bin_snp_counts = self.rng.poisson(
+            [self.config.snp_density * bin_obj.length for bin_obj in self.bins]
+        ).astype(np.int32)
+        self.snp_bin_offsets = np.empty(B + 1, dtype=np.int64)
+        self.snp_bin_offsets[0] = 0
+        np.cumsum(self.bin_snp_counts, out=self.snp_bin_offsets[1:])
+        total_snps = int(self.snp_bin_offsets[-1])
+
+        self.snp_bins = np.repeat(np.arange(B, dtype=np.int32), self.bin_snp_counts)
+        self.snp_positions = np.empty(total_snps, dtype=np.int64)
+        self.snp_bin_local_indices = np.empty(total_snps, dtype=np.int32)
+        self.snp_chromosomes = np.empty(total_snps, dtype=object)
+
+        for b, bin_obj in enumerate(self.bins):
+            start = int(self.snp_bin_offsets[b])
+            end = int(self.snp_bin_offsets[b + 1])
+            snp_count = end - start
+            if snp_count == 0:
+                continue
+
+            replace = snp_count > bin_obj.length
+            offsets = self.rng.choice(bin_obj.length, size=snp_count, replace=replace)
+            self.snp_positions[start:end] = bin_obj.start + 1 + np.sort(offsets)
+            self.snp_bin_local_indices[start:end] = np.arange(snp_count, dtype=np.int32)
+            self.snp_chromosomes[start:end] = bin_obj.chromosome
+
+    def _cell_bin_allelic_parameters(self, cell: Cell, bin_index: int) -> tuple[float, float]:
+        """Return expected alternate fraction and total copy number for one cell-bin."""
+        hap_block = self.haplotype_blocks[self.bin_to_block.get(bin_index, 0)]
+
+        if cell.is_doublet:
+            k1, k2 = cell.doublet_clones
+            clone1 = self.clones[k1]
+            clone2 = self.clones[k2]
+            cn_A1 = clone1.cn_profile_A[bin_index]
+            cn_B1 = clone1.cn_profile_B[bin_index]
+            cn_A2 = clone2.cn_profile_A[bin_index]
+            cn_B2 = clone2.cn_profile_B[bin_index]
+            tcn = cn_A1 + cn_B1 + cn_A2 + cn_B2
+            if tcn == 0:
+                return 0.5, 0.0
+            cn_alt = cn_A1 + cn_A2 if hap_block.alternate_haplotype == Haplotype.A else cn_B1 + cn_B2
+        else:
+            clone = self.clones[cell.clone_assignment]
+            cn_A = clone.cn_profile_A[bin_index]
+            cn_B = clone.cn_profile_B[bin_index]
+            tcn = cn_A + cn_B
+            if tcn == 0:
+                return 0.5, 0.0
+            cn_alt = cn_A if hap_block.alternate_haplotype == Haplotype.A else cn_B
+
+        p_alt = cn_alt / (tcn + 1e-10)
+        if hap_block.orientation == -1:
+            p_alt = 1.0 - p_alt
+        return float(p_alt), float(tcn)
 
     def _generate_allele_counts(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -968,67 +1045,53 @@ class HaploTreeSimulator:
         N = self.config.num_cells
         B = self.config.num_bins
 
-        alternate_counts = np.zeros((N, B), dtype=int)
-        reference_counts = np.zeros((N, B), dtype=int)
-        total_counts = np.zeros((N, B), dtype=int)
-        self.bin_snp_counts = self.rng.poisson(
-            [self.config.snp_density * bin_obj.length for bin_obj in self.bins]
-        ).astype(int)
+        alternate_counts = np.zeros((N, B), dtype=np.int32)
+        reference_counts = np.zeros((N, B), dtype=np.int32)
+        total_counts = np.zeros((N, B), dtype=np.int32)
+        self._generate_snp_metadata()
+        total_snps = int(self.snp_bin_offsets[-1])
+        alt_rows = []
+        alt_cols = []
+        alt_data = []
+        ref_rows = []
+        ref_cols = []
+        ref_data = []
 
         for n, cell in enumerate(self.cells):
             for b, snp_count in enumerate(self.bin_snp_counts):
                 if snp_count == 0:
                     continue
 
-                hap_block = self.haplotype_blocks[self.bin_to_block.get(b, 0)]
+                p_alt, tcn = self._cell_bin_allelic_parameters(cell, b)
+                if tcn == 0:
+                    continue
 
-                if cell.is_doublet:
-                    k1, k2 = cell.doublet_clones
-                    clone1 = self.clones[k1]
-                    clone2 = self.clones[k2]
-
-                    cn_A1 = clone1.cn_profile_A[b]
-                    cn_B1 = clone1.cn_profile_B[b]
-                    cn_A2 = clone2.cn_profile_A[b]
-                    cn_B2 = clone2.cn_profile_B[b]
-                    tcn = cn_A1 + cn_B1 + cn_A2 + cn_B2
-
-                    if tcn == 0:
-                        continue
-
-                    if hap_block.alternate_haplotype == Haplotype.A:
-                        cn_alt = cn_A1 + cn_A2
-                    else:
-                        cn_alt = cn_B1 + cn_B2
-
-                    p_alt = cn_alt / (tcn + 1e-10)
-                    depth_mean = cell.allelic_coverage * snp_count * (tcn / 2.0)
-                else:
-                    clone = self.clones[cell.clone_assignment]
-                    cn_A = clone.cn_profile_A[b]
-                    cn_B = clone.cn_profile_B[b]
-                    tcn = cn_A + cn_B
-
-                    if tcn == 0:
-                        continue
-
-                    if hap_block.alternate_haplotype == Haplotype.A:
-                        p_alt = cn_A / (tcn + 1e-10)
-                    else:
-                        p_alt = cn_B / (tcn + 1e-10)
-
-                    depth_mean = cell.allelic_coverage * snp_count * (tcn / 2.0)
-
+                depth_mean = cell.allelic_coverage * snp_count * (tcn / 2.0)
                 total_depth = int(self.rng.poisson(depth_mean))
                 if total_depth == 0:
                     continue
 
-                if hap_block.orientation == -1:
-                    p_alt = 1.0 - p_alt
+                snp_depths = self.rng.multinomial(total_depth, np.full(int(snp_count), 1.0 / snp_count))
+                alt_depths = self._sample_snp_alternate_counts(snp_depths, p_alt)
+                ref_depths = snp_depths - alt_depths
 
-                alt_depth = self._sample_bin_alternate_count(total_depth, p_alt, int(snp_count))
-                ref_depth = total_depth - alt_depth
+                snp_start = int(self.snp_bin_offsets[b])
+                alt_nonzero = alt_depths > 0
+                if np.any(alt_nonzero):
+                    snp_rows = snp_start + np.where(alt_nonzero)[0]
+                    alt_rows.append(snp_rows.astype(np.int64, copy=False))
+                    alt_cols.append(np.full(len(snp_rows), n, dtype=np.int32))
+                    alt_data.append(alt_depths[alt_nonzero].astype(np.int32, copy=False))
 
+                ref_nonzero = ref_depths > 0
+                if np.any(ref_nonzero):
+                    snp_rows = snp_start + np.where(ref_nonzero)[0]
+                    ref_rows.append(snp_rows.astype(np.int64, copy=False))
+                    ref_cols.append(np.full(len(snp_rows), n, dtype=np.int32))
+                    ref_data.append(ref_depths[ref_nonzero].astype(np.int32, copy=False))
+
+                alt_depth = int(alt_depths.sum())
+                ref_depth = int(ref_depths.sum())
                 alternate_counts[n, b] = alt_depth
                 reference_counts[n, b] = ref_depth
                 total_counts[n, b] = total_depth
@@ -1039,6 +1102,29 @@ class HaploTreeSimulator:
                 total_counts[n, :]
             )
 
+        if alt_data:
+            self.snp_alt_counts = sparse.coo_matrix(
+                (
+                    np.concatenate(alt_data),
+                    (np.concatenate(alt_rows), np.concatenate(alt_cols)),
+                ),
+                shape=(total_snps, N),
+                dtype=np.int32,
+            ).tocsr()
+        else:
+            self.snp_alt_counts = sparse.csr_matrix((total_snps, N), dtype=np.int32)
+
+        if ref_data:
+            self.snp_ref_counts = sparse.coo_matrix(
+                (
+                    np.concatenate(ref_data),
+                    (np.concatenate(ref_rows), np.concatenate(ref_cols)),
+                ),
+                shape=(total_snps, N),
+                dtype=np.int32,
+            ).tocsr()
+        else:
+            self.snp_ref_counts = sparse.csr_matrix((total_snps, N), dtype=np.int32)
         return alternate_counts, reference_counts, total_counts
 
 
@@ -1150,5 +1236,9 @@ class HaploTreeSimulator:
             "cn_profiles_B": cn_profiles_B,
             "segments": self.segments,
             "bin_snp_counts": getattr(self, "bin_snp_counts", None),
+            "snp_bins": getattr(self, "snp_bins", None),
+            "snp_positions": getattr(self, "snp_positions", None),
+            "snp_chromosomes": getattr(self, "snp_chromosomes", None),
+            "snp_bin_local_indices": getattr(self, "snp_bin_local_indices", None),
             "events": events,
         }

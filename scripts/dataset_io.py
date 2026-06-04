@@ -13,6 +13,7 @@ from typing import Dict, Iterable, List
 
 import numpy as np
 import pandas as pd
+from scipy.io import mmread
 
 
 REQUIRED_DATASET_FILES = [
@@ -35,6 +36,10 @@ OPTIONAL_DATASET_FILES = {
     "segment_allele_alt": "segment_allele_alt.tsv",
     "segment_allele_ref": "segment_allele_ref.tsv",
     "segment_allele_total": "segment_allele_total.tsv",
+    "snps": "snps.tsv",
+    "bin_snp_counts": "bin_snp_counts.tsv",
+    "snp_allele_alt": "snp_allele_alt.mtx",
+    "snp_allele_ref": "snp_allele_ref.mtx",
 }
 
 
@@ -112,6 +117,11 @@ def load_dataset(dataset_dir: Path) -> Dict:
     for key, filename in OPTIONAL_DATASET_FILES.items():
         path = dataset_dir / filename
         if path.exists():
-            dataset[key] = read_matrix(path)
+            if filename.endswith(".mtx"):
+                dataset[key] = mmread(path).tocsr()
+            elif filename in {"snps.tsv", "bin_snp_counts.tsv"}:
+                dataset[key] = pd.read_csv(path, sep="\t")
+            else:
+                dataset[key] = read_matrix(path)
 
     return dataset
