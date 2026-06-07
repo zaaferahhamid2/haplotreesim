@@ -16,6 +16,8 @@ from sklearn.cluster import KMeans
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from dataset_io import load_dataset
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from haplotreesim.metrics.tree_metrics import compute_robinson_foulds_distance, compute_all_tree_metrics
 
 
 def parse_args():
@@ -131,6 +133,33 @@ def main():
     recall = tp / len(true_bps) if true_bps else 0.0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
+    # ── Tree metrics ─────────────────────────────────────────────────────────────
+    tree_file = args.scicone_output_dir / "scicone_tree_inferred.txt"
+    tree_metrics = {}
+    if tree_file.exists():
+        # Parse SCICoNE tree edges
+        pred_edges = []
+        with open(tree_file) as f:
+            for line in f:
+                if line.startswith("node "):
+                    parts = line.strip().split(":")
+                    node_id = int(parts[0].replace("node ", "").strip())
+                    pid_part = line.split("p_id:")[1].split(",")[0]
+                    if pid_part != "NULL":
+                        parent_id = int(pid_part)
+                        pred_edges.append((parent_id, node_id))
+
+        # Parse true tree edges from tree_structure.json
+        import json
+        tree_struct = json.load(open(args.dataset_dir / "tree_structure.json"))
+        true_edges = []
+        for node in tree_struct["nodes"]:
+            if node["parent_id"] != -1:
+                true_edges.append((node["parent_id"], node["node_id"]))
+
+        if pred_edges and true_edges:
+            tree_metrics = compute_all_tree_metrics(true_edges, pred_edges)
+
     print(f"\n{'='*50}")
     print("SCICONE EVALUATION RESULTS")
     print(f"{'='*50}")
@@ -140,6 +169,9 @@ def main():
     print(f"  Breakpoint F1:    {f1:.4f}  (P={precision:.3f} R={recall:.3f})")
     print(f"  True breakpoints: {len(true_bps)}")
     print(f"  Pred breakpoints: {len(pred_bps)}")
+    if tree_metrics:
+        print(f"  RF Distance:      {tree_metrics.get('rf_distance', float('nan')):.4f}  (0=perfect)")
+        print(f"  Ancestor-Desc:    {tree_metrics.get('ancestor_descendant_accuracy', float('nan')):.4f}  (1=perfect)")
     print(f"{'='*50}")
     print(f"\nTrue TCN sample (cell 0): {tcn_true[0,:10].tolist()}")
     print(f"Pred TCN sample (cell 0): {tcn_pred[0,:10].tolist()}")
@@ -154,7 +186,9 @@ def main():
         "n_true_breakpoints": len(true_bps),
         "n_pred_breakpoints": len(pred_bps),
         "n_cells": n_cells,
-        "n_segments": n_segs
+        "n_segments": n_segs,
+        "rf_distance": tree_metrics.get("rf_distance", None),
+        "ancestor_descendant_accuracy": tree_metrics.get("ancestor_descendant_accuracy", None)
     }
     with open(metrics_out, "w") as f:
         json.dump(metrics, f, indent=2)
