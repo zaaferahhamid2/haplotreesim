@@ -133,32 +133,79 @@ def main():
     recall = tp / len(true_bps) if true_bps else 0.0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
-    # ── Tree metrics ─────────────────────────────────────────────────────────────
+    # ── Tree metrics with reconciliation ─────────────────────────────────────────
     tree_file = args.scicone_output_dir / "scicone_tree_inferred.txt"
     tree_metrics = {}
     if tree_file.exists():
-        # Parse SCICoNE tree edges
-        pred_edges = []
+        import json
+        from scipy.optimize import linear_sum_assignment
+        from haplotreesim.metrics.clone_metrics import hungarian_matching
+
+        # Parse SCICoNE tree: node_id -> parent_id and events
+        pred_node_parents = {}
+        pred_node_events = {}
         with open(tree_file) as f:
             for line in f:
-                if line.startswith("node "):
-                    parts = line.strip().split(":")
-                    node_id = int(parts[0].replace("node ", "").strip())
-                    pid_part = line.split("p_id:")[1].split(",")[0]
-                    if pid_part != "NULL":
-                        parent_id = int(pid_part)
-                        pred_edges.append((parent_id, node_id))
+                if not line.startswith("node "):
+                    continue
+                node_id = int(line.split(":")[0].replace("node ","").strip())
+                pid_str = line.split("p_id:")[1].split(",")[0]
+                parent_id = None if pid_str == "NULL" else int(pid_str)
+                pred_node_parents[node_id] = parent_id
+                events_str = line.split("[")[1].split("]")[0]
+                pred_node_events[node_id] = events_str
 
-        # Parse true tree edges from tree_structure.json
-        import json
+        pred_edges = [(p, c) for c, p in pred_node_parents.items() if p is not None]
+
+        # Assign each cell to a SCICoNE node by matching CN profile
+        # Cells with same CN profile -> same node
+        cn_profiles = tcn_pred_bins
+        unique_profiles = {}
+        cell_node_pred = np.zeros(n_cells, dtype=int)
+        next_node = 0
+        for ci in range(n_cells):
+            key = tuple(cn_profiles[ci])
+            if key not in unique_profiles:
+                # Find closest SCICoNE node by CN profile similarity
+                # Map to closest pred node
+                unique_profiles[key] = next_node
+                next_node += 1
+            cell_node_pred[ci] = unique_profiles[key]
+
+        # Map pred node IDs to sequential integers
+        pred_node_ids = sorted(pred_node_parents.keys())
+        pred_id_map = {nid: i for i, nid in enumerate(pred_node_ids)}
+
+        # Use hungarian matching to align pred nodes to true clones
+        true_clone_labels = clone_labels
+        # Remap cell_node_pred to be sequential
+        unique_pred = sorted(set(cell_node_pred.tolist()))
+        remap = {v: i for i, v in enumerate(unique_pred)}
+        cell_node_pred_seq = np.array([remap[x] for x in cell_node_pred])
+
+        mapping, match_acc = hungarian_matching(true_clone_labels, cell_node_pred_seq)
+
+        # Relabel pred tree edges using mapping
+        # First build pred edges with sequential IDs
+        seq_pred_edges = []
+        for (p, c) in pred_edges:
+            sp = pred_id_map.get(p, p)
+            sc = pred_id_map.get(c, c)
+            seq_pred_edges.append((sp, sc))
+
+        # Parse true tree
         tree_struct = json.load(open(args.dataset_dir / "tree_structure.json"))
-        true_edges = []
-        for node in tree_struct["nodes"]:
-            if node["parent_id"] != -1:
-                true_edges.append((node["parent_id"], node["node_id"]))
+        true_edges = [(n["parent_id"], n["node_id"])
+                      for n in tree_struct["nodes"] if n["parent_id"] != -1]
 
-        if pred_edges and true_edges:
-            tree_metrics = compute_all_tree_metrics(true_edges, pred_edges)
+        # Compute RF on reconciled trees
+        rf = compute_robinson_foulds_distance(true_edges, seq_pred_edges)
+        tree_metrics = {
+            "rf_distance": rf,
+            "cell_node_match_accuracy": match_acc,
+            "n_pred_nodes": len(pred_node_parents),
+            "n_true_nodes": len(tree_struct["nodes"])
+        }
 
     print(f"\n{'='*50}")
     print("SCICONE EVALUATION RESULTS")
