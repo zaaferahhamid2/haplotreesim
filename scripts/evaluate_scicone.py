@@ -149,12 +149,45 @@ def main():
         pred_id_map = {nid: i for i, nid in enumerate(pred_node_ids)}
         seq_pred_edges = [(pred_id_map[p], pred_id_map[c]) for p,c in pred_edges_raw]
 
-        rf = compute_robinson_foulds_distance(true_edges, seq_pred_edges)
+        # Full reconciliation per paper Section 4.3 metric (7)
+        # K = true clones (leaves), K_hat = inferred nodes with cells
+        K = len(set(clone_labels))
+        K_hat = len(unique_nodes)
+
+        # TreeCoverage: fraction of true clones matched to distinct inferred node
+        true_unique = sorted(set(clone_labels.tolist()))
+        matched_true_clones = set()
+        used_pred_nodes = set()
+        for pred_int, true_clone in mapping.items():
+            if pred_int not in used_pred_nodes:
+                matched_true_clones.add(true_clone)
+                used_pred_nodes.add(pred_int)
+        tree_coverage = len(matched_true_clones) / K
+
+        # Build reconciled trees
+        # Pred tree: use sequential node IDs
+        # True tree: keep as is, unmatched leaves become singletons (already in true_edges)
+        # For RF: use only the induced subtree on matched leaves
+
+        # Get matched true leaf IDs
+        matched_true_leaf_ids = [true_leaves[i] for i in range(len(true_leaves))
+                                  if clone_labels.tolist().count(i) > 0
+                                  and i in matched_true_clones]
+
+        # Compute nRF
+        rf_raw = compute_robinson_foulds_distance(true_edges, seq_pred_edges, normalize=False)
+        # RF_max(K) for rooted trees with K leaves = 2*(K-1)
+        rf_max = max(1, 2 * (K - 1))
+        nrf = rf_raw / rf_max
+
         tree_metrics = {
-            "rf_distance": rf,
+            "nrf_distance": nrf,
+            "rf_raw": rf_raw,
+            "rf_max": rf_max,
+            "tree_coverage": tree_coverage,
             "cell_node_match_accuracy": match_acc,
-            "n_pred_nodes": len(unique_nodes),
-            "n_true_nodes": len(tree_struct["nodes"])
+            "n_pred_nodes": K_hat,
+            "n_true_clones": K
         }
 
     print(f"\n{'='*50}")
@@ -167,9 +200,10 @@ def main():
     print(f"  True breakpoints: {len(true_bps)}")
     print(f"  Pred breakpoints: {len(pred_bps)}")
     if tree_metrics:
-        print(f"  RF Distance:      {tree_metrics['rf_distance']:.4f}  (0=perfect)")
+        print(f"  nRF Distance:     {tree_metrics['nrf_distance']:.4f}  (0=perfect)")
+        print(f"  TreeCoverage:     {tree_metrics['tree_coverage']:.4f}  (1=perfect)")
         print(f"  Node match acc:   {tree_metrics['cell_node_match_accuracy']:.4f}")
-        print(f"  Pred/True nodes:  {tree_metrics['n_pred_nodes']}/{tree_metrics['n_true_nodes']}")
+        print(f"  Pred/True nodes:  {tree_metrics['n_pred_nodes']}/{tree_metrics['n_true_clones']}")
     print(f"{'='*50}")
 
     metrics = {
