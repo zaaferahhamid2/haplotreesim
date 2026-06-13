@@ -1,15 +1,15 @@
 """
-Run SCICoNE on converted HaploTreeSim input.
-Steps: breakpoint detection -> segment counts -> tree inference
+Run SCICoNE on converted HaploTreeSim input using pyscicone Python API.
+This gives access to cell_node_labels and proper tree objects.
 """
 
 import argparse
-import subprocess
+import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from dataset_io import write_json
+import numpy as np
+import pandas as pd
 
 
 def parse_args():
@@ -17,127 +17,113 @@ def parse_args():
     parser.add_argument("--input-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--scicone-build", type=Path,
-                        default=Path.home() / "Documents/SCICoNE/build",
-                        help="Path to SCICoNE build directory")
+                        default=Path.home() / "Documents/SCICoNE/build")
+    parser.add_argument("--n-reps", type=int, default=4)
     parser.add_argument("--n-iters", type=int, default=4000)
     parser.add_argument("--window-size", type=int, default=10)
     parser.add_argument("--threshold", type=float, default=3.0)
-    parser.add_argument("--ploidy", type=int, default=2)
-    parser.add_argument("--copy-number-limit", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
 
-def run(cmd, cwd=None):
-    print("Running:", " ".join(str(c) for c in cmd))
-    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
-    if result.stdout:
-        print(result.stdout[-500:])
-    if result.returncode != 0:
-        print("STDERR:", result.stderr[-500:])
-        raise RuntimeError(f"Command failed: {cmd[0]}")
-    return result
-
-
 def main():
     args = parse_args()
-    input_dir = args.input_dir
-    output_dir = args.output_dir
-    output_dir.mkdir(parents=True, exist_ok=True)
-    build = args.scicone_build
-    scripts = build.parent / "scripts"
+    args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    import pandas as pd
-    rc = pd.read_csv(input_dir / "readcounts.csv", header=None)
-    n_cells, n_bins = rc.shape
-    print(f"Input: {n_cells} cells x {n_bins} bins")
+    import scicone
 
-    rc_file = output_dir / "readcounts.csv"
-    import shutil
-    shutil.copy2(input_dir / "readcounts.csv", rc_file)
+    sci = scicone.SCICoNE(
+        str(args.scicone_build) + "/",
+        str(args.output_dir) + "/",
+        verbose=True
+    )
+
+    # Load read counts matrix (cells x bins)
+    print(f"Loading data from {args.input_dir}")
+    rc = pd.read_csv(args.input_dir / "readcounts.csv", header=None)
+    d_mat = rc.values.astype(float)
+    n_cells, n_bins = d_mat.shape
+    print(f"  {n_cells} cells x {n_bins} bins")
 
     # Step 1: Breakpoint detection
-    print("\n--- Step 1: Breakpoint detection ---")
-    run([
-        build / "breakpoint_detection",
-        f"--d_matrix_file={rc_file}",
-        f"--n_bins={n_bins}",
-        f"--n_cells={n_cells}",
-        f"--window_size={args.window_size}",
-        f"--threshold={args.threshold}",
-        "--postfix=scicone"
-    ], cwd=output_dir)
+    print("\n--- Breakpoint detection ---")
+    bps = sci.detect_breakpoints(
+        d_mat,
+        window_size=args.window_size,
+        threshold=args.threshold,
+        bp_limit=300
+    )
+    n_regions = len(bps["segmented_region_sizes"])
+    print(f"  Detected {n_regions} regions")
 
-    # Step 2: Segment counts
-    print("\n--- Step 2: Segment counts ---")
-    segmented_file = output_dir / "readcounts_segmented_counts.txt"
-    region_sizes_file = output_dir / "scicone_segmented_region_sizes.txt"
+    # Save breakpoints
+    np.savetxt(args.output_dir / "segmented_regions.txt",
+               bps["segmented_regions"], fmt="%d")
+    np.savetxt(args.output_dir / "segmented_region_sizes.txt",
+               bps["segmented_region_sizes"], fmt="%d")
 
-    # find the segmented regions file
-    import glob
-    seg_regions = list(output_dir.glob("*scicone_segmented_region_sizes.txt"))
-    if not seg_regions:
-        seg_regions = list(output_dir.glob("*segmented_region_sizes*"))
+    # Step 2: Tree inference
+    print("\n--- Tree inference ---")
+    inferred_tree = sci.learn_tree(
+        d_mat,
+        bps["segmented_region_sizes"],
+        n_reps=args.n_reps,
+        seed=args.seed,
+        cluster=True,
+        full=True,
+        max_scoring=True,
+        robustness_thr=0.5
+    )
 
-    run([
-        sys.executable,
-        scripts / "segment_counts.py",
-        str(rc_file),
-        str(output_dir / "scicone_segmented_region_sizes.txt")
-    ], cwd=output_dir)
+    # Save outputs
+    cell_node_labels = inferred_tree.cell_node_labels
+    pd.Series(cell_node_labels).to_csv(
+        args.output_dir / "cell_node_labels.csv", index=False, header=False)
+    print(f"  Wrote cell_node_labels.csv")
+    print(f"  Unique nodes: {sorted(set(cell_node_labels))}")
 
-    # find segmented counts file
-    seg_counts = list(output_dir.glob("*segmented_counts.txt"))
-    if not seg_counts:
-        raise FileNotFoundError("Segmented counts file not found")
-    seg_counts_file = seg_counts[0]
-    seg_sizes_file = output_dir / "scicone_segmented_region_sizes.txt"
+    cnvs = inferred_tree.outputs["inferred_cnvs"]
+    np.savetxt(args.output_dir / "inferred_cnvs.csv", cnvs, delimiter=",", fmt="%d")
+    print(f"  Wrote inferred_cnvs.csv: {cnvs.shape}")
 
-    seg_rc = pd.read_csv(seg_counts_file, header=None, sep="\t")
-    n_regions = seg_rc.shape[1]
-    print(f"  Segmented into {n_regions} regions")
+    # Save tree structure from tree_str
+    tree_str = getattr(inferred_tree, "tree_str", None)
+    if tree_str:
+        with open(args.output_dir / "tree_str.txt", "w") as f:
+            f.write(tree_str)
+        print(f"  Wrote tree_str.txt")
+    
+    # Parse edges from outputs if available
+    edges = []
+    tree_edges_file = list(Path(str(args.output_dir)).glob("*tree_inferred.txt"))
+    if not tree_edges_file:
+        tree_edges_file = list(Path(str(args.scicone_build)).parent.glob("*tree_inferred.txt"))
+    if tree_edges_file:
+        with open(tree_edges_file[0]) as f:
+            for line in f:
+                if line.startswith("node ") and "p_id:" in line:
+                    node_id = int(line.split(":")[0].replace("node ","").strip())
+                    pid_str = line.split("p_id:")[1].split(",")[0]
+                    if pid_str != "NULL":
+                        edges.append((int(pid_str), node_id))
+        with open(args.output_dir / "tree_edges.txt", "w") as f:
+            for p, c in edges:
+                f.write(f"{p}\t{c}\n")
+        print(f"  Wrote tree_edges.txt: {len(edges)} edges")
 
-    # Step 3: Tree inference
-    print("\n--- Step 3: Tree inference ---")
-    run([
-        build / "inference",
-        f"--d_matrix_file={seg_counts_file}",
-        f"--region_sizes_file={seg_sizes_file}",
-        f"--n_regions={n_regions}",
-        f"--n_cells={n_cells}",
-        f"--ploidy={args.ploidy}",
-        "--verbosity=1",
-        f"--copy_number_limit={args.copy_number_limit}",
-        f"--n_iters={args.n_iters}",
-        f"--seed={args.seed}",
-        "--postfix=scicone"
-    ], cwd=output_dir)
+    # Save manifest
+    with open(args.output_dir / "manifest.json", "w") as f:
+        json.dump({
+            "input_dir": str(args.input_dir),
+            "output_dir": str(args.output_dir),
+            "n_cells": n_cells,
+            "n_bins": n_bins,
+            "n_regions": n_regions,
+            "unique_nodes": sorted(set(cell_node_labels))
+        }, f, indent=2)
 
-    # Check outputs
-    cnv_file = output_dir / "scicone_inferred_cnvs.csv"
-    tree_file = output_dir / "scicone_tree_inferred.txt"
-
-    if cnv_file.exists():
-        cnvs = pd.read_csv(cnv_file, header=None)
-        print(f"\n✓ CNV profiles: {cnvs.shape[0]} cells x {cnvs.shape[1]} regions")
-    if tree_file.exists():
-        print(f"✓ Tree saved to {tree_file}")
-
-    write_json(output_dir / "manifest.json", {
-        "input_dir": str(input_dir),
-        "output_dir": str(output_dir),
-        "n_cells": n_cells,
-        "n_bins": n_bins,
-        "n_regions": n_regions,
-        "files": {
-            "cnvs": str(cnv_file),
-            "tree": str(tree_file),
-            "segmented_counts": str(seg_counts_file),
-            "segmented_region_sizes": str(seg_sizes_file)
-        }
-    })
-    print(f"\nDone. Output in {output_dir}")
+    print(f"\nDone. Output in {args.output_dir}")
 
 
 if __name__ == "__main__":
