@@ -182,6 +182,49 @@ python3 scripts/evaluate_scicone.py \
 
 ---
 
+## CONET Pipeline
+
+Requires C++ compilation and conet-py:
+
+```bash
+cd ~/Documents/CONET/src
+sed -i "" "s|/usr/local|/opt/homebrew|g" Makefile
+make
+pip install -e ~/Documents/CONET/python/conet-py/
+```
+
+```bash
+python3 scripts/convert_to_conet.py \
+  --input-dir examples/simulation_wgs \
+  --output-dir examples/simulation_wgs/conet_input \
+  --overwrite
+
+conda activate CONET
+python3 scripts/run_conet.py \
+  --input-dir examples/simulation_wgs/conet_input \
+  --output-dir examples/simulation_wgs/conet_output \
+  --counts-penalty 100 \
+  --overwrite
+
+python3 scripts/evaluate_conet.py \
+  --dataset-dir examples/simulation_wgs \
+  --conet-output-dir examples/simulation_wgs/conet_output \
+  --metrics-out examples/simulation_wgs/conet_metrics.json
+```
+
+**Results (whole genome, 100 cells, lambda_events=40):**
+
+| Metric | Value |
+|---|---|
+| TCN MSE | 2.42 |
+| Breakpoint F1 | 0.45 (P=0.955, R=0.292) |
+| nRF Distance | 0.40 |
+| TreeCoverage | 0.83 |
+
+**Note:** CONET infers CN values of 1-2 only on our dataset. This is a known limitation when true CN amplitudes exceed CONET's typical operating range.
+
+---
+
 ## Parameter Configuration
 
 | Parameter | Default | Description |
