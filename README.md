@@ -255,7 +255,7 @@ To add a new tool create three scripts:
 - [x] Week 15: SEACON integration
 - [x] Week 16: Alleloscope integration (whole-genome)
 - [x] Week 17: SCICoNE integration (whole-genome)
-- [ ] Week 18: CONET integration
+- [x] Week 18: CONET integration (complete, CN range limitation noted)
 - [ ] Week 19: MEDICC2 integration
 - [ ] Weeks 20-24: Full experiment grid
 
