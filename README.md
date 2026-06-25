@@ -225,6 +225,52 @@ python3 scripts/evaluate_conet.py \
 
 ---
 
+## CNRein Pipeline
+
+Requires CNRein installed via pip (in a conda env with Python 3.9):
+
+```bash
+conda create -n CONET python=3.9 -y
+conda activate CONET
+pip install CNRein scikit-learn
+```
+
+```bash
+conda activate CONET
+cd ~/Documents/haplotreesim
+
+python3 scripts/convert_to_cnrein.py \
+  --input-dir examples/simulation_wgs \
+  --output-dir examples/simulation_wgs/cnrein_output \
+  --overwrite
+
+python3 scripts/run_cnrein.py \
+  --input-dir examples/simulation_wgs/cnrein_output \
+  --output-dir examples/simulation_wgs/cnrein_run \
+  --overwrite
+
+source venv/bin/activate
+python3 scripts/evaluate_cnrein.py \
+  --dataset-dir examples/simulation_wgs \
+  --cnrein-output-dir examples/simulation_wgs/cnrein_run \
+  --metrics-out examples/simulation_wgs/cnrein_metrics.json
+```
+
+**Results (whole genome, 100 cells, lambda_events=40):**
+
+| Metric | Value |
+|---|---|
+| HSCN Error | 0.583 |
+| LOH F1 | 0.000 |
+| TCN MSE | 2.043 |
+| Clone ARI | 0.465 |
+| Clone NMI | 0.719 |
+| Breakpoint F1 | 0.047 (P=0.024, R=0.889) |
+
+**Note:** CNRein correctly detects CN values 1-11. High breakpoint recall (0.889) but low precision due to fine-grained segmentation. BAM processing step is bypassed by generating numpy inputs directly from simulator outputs.
+
+---
+
 ## Parameter Configuration
 
 | Parameter | Default | Description |
@@ -299,7 +345,7 @@ To add a new tool create three scripts:
 - [x] Week 16: Alleloscope integration (whole-genome)
 - [x] Week 17: SCICoNE integration (whole-genome)
 - [x] Week 18: CONET integration (complete, CN range limitation noted)
-- [ ] Week 19: MEDICC2 integration
+- [x] Week 19: CNRein integration (complete, CNNaive step)
 - [ ] Weeks 20-24: Full experiment grid
 
 ---
