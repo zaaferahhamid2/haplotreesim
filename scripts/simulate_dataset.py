@@ -58,6 +58,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bin-width", type=int, default=500000)
     parser.add_argument("--num-bins", type=int, default=None, help="Explicit bin count for single-chromosome synthetic runs.")
     parser.add_argument("--num-clones", type=int, default=4)
+    parser.add_argument("--alpha-tree", type=float, default=0.5, help="Beta-splitting alpha parameter (tree balance).")
+    parser.add_argument("--beta-tree", type=float, default=0.3, help="Beta-splitting beta parameter (tree balance; smaller = more imbalanced).")
     parser.add_argument("--num-cells", type=int, default=100)
     parser.add_argument("--lambda-events", type=float, default=5)
     parser.add_argument("--lambda-amplitude", type=float, default=1.0)
@@ -126,6 +128,8 @@ def main() -> None:
         bin_width=args.bin_width,
         num_bins=args.num_bins,
         num_clones=args.num_clones,
+        alpha_tree=args.alpha_tree,
+        beta_tree=args.beta_tree,
         num_cells=args.num_cells,
         lambda_events=args.lambda_events,
         lambda_amplitude=args.lambda_amplitude,
