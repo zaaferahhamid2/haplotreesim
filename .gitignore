@@ -56,3 +56,4 @@ benchmark_results/
 *.pdf
 ~$*
 examples/
+.pybiomart.sqlite
