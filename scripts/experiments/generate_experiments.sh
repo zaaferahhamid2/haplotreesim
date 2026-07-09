@@ -23,7 +23,7 @@ SEEDS=(42 43 44)
 echo "=== 1. Clone number (generates reference tree structures) ==="
 for SEED in "${SEEDS[@]}"; do
     for K in 2 4 8; do
-        DIR="$BASE_DIR/clones_${K}_rep${SEED}"
+        DIR="$BASE_DIR/clone_${K}_rep${SEED}"
         $SIM --output-dir $DIR \
             --whole-genome --num-clones $K --num-cells $DEFAULT_CELLS \
             --lambda-events $DEFAULT_EVENTS --lambda-amplitude $DEFAULT_AMP \
@@ -50,7 +50,7 @@ done
 
 echo "=== 3. Event rate (reuse tree from clones_4_rep{seed}) ==="
 for SEED in "${SEEDS[@]}"; do
-    TREE="$BASE_DIR/clones_4_rep${SEED}/tree_structure.json"
+    TREE="$BASE_DIR/clone_4_rep${SEED}/tree_structure.json"
     for E in 10 80; do
         DIR="$BASE_DIR/events_${E}_rep${SEED}"
         $SIM --output-dir $DIR \
@@ -65,7 +65,7 @@ done
 
 echo "=== 4. Cell count (reuse tree from clones_4_rep{seed}) ==="
 for SEED in "${SEEDS[@]}"; do
-    TREE="$BASE_DIR/clones_4_rep${SEED}/tree_structure.json"
+    TREE="$BASE_DIR/clone_4_rep${SEED}/tree_structure.json"
     for N in 50 500; do
         DIR="$BASE_DIR/cells_${N}_rep${SEED}"
         $SIM --output-dir $DIR \
@@ -80,7 +80,7 @@ done
 
 echo "=== 5. Normal cell fraction (reuse tree from clones_4_rep{seed}) ==="
 for SEED in "${SEEDS[@]}"; do
-    TREE="$BASE_DIR/clones_4_rep${SEED}/tree_structure.json"
+    TREE="$BASE_DIR/clone_4_rep${SEED}/tree_structure.json"
     for NRM in 0.0 0.3; do
         NRM_TAG=$(echo $NRM | tr '.' '_')
         DIR="$BASE_DIR/normal_${NRM_TAG}_rep${SEED}"
@@ -96,7 +96,7 @@ done
 
 echo "=== 6. Event amplitude (reuse tree from clones_4_rep{seed}) ==="
 for SEED in "${SEEDS[@]}"; do
-    TREE="$BASE_DIR/clones_4_rep${SEED}/tree_structure.json"
+    TREE="$BASE_DIR/clone_4_rep${SEED}/tree_structure.json"
     for AMP in 1.0 4.0; do
         AMP_TAG=$(echo $AMP | tr '.' '_')
         DIR="$BASE_DIR/amplitude_${AMP_TAG}_rep${SEED}"
@@ -112,7 +112,7 @@ done
 
 echo "=== 7. Focal vs broad events (reuse tree from clones_4_rep{seed}) ==="
 for SEED in "${SEEDS[@]}"; do
-    TREE="$BASE_DIR/clones_4_rep${SEED}/tree_structure.json"
+    TREE="$BASE_DIR/clone_4_rep${SEED}/tree_structure.json"
     for F in 0.3 1.0; do
         F_TAG=$(echo $F | tr '.' '_')
         DIR="$BASE_DIR/focal_${F_TAG}_rep${SEED}"
