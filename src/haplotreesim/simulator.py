@@ -167,11 +167,15 @@ class HaploTreeSimulator:
         
         # Create minimal tree node objects for compatibility
         class SimpleTreeNode:
-            def __init__(self, node_id, parent_id, edge_length, is_leaf):
+            def __init__(self, node_id, parent_id, edge_length, is_leaf,
+                         interval=None, perc=1.0, depth=0):
                 self.node_id = node_id
                 self.parent_id = parent_id
                 self.edge_length = edge_length
                 self.is_leaf = is_leaf
+                self.interval = interval
+                self.perc = perc
+                self.depth = depth
         
         self._tree_nodes = []
         for node_data in tree_data['nodes']:
