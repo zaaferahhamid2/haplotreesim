@@ -18,7 +18,7 @@ DEFAULT_FOCAL=0.7
 DEFAULT_ALPHA=0.5
 DEFAULT_BETA=0.5
 
-SEEDS=(42 43 44)
+SEEDS=(42 43 44 45 46)
 
 echo "=== 1. Clone number (generates reference tree structures) ==="
 for SEED in "${SEEDS[@]}"; do
