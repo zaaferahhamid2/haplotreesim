@@ -6,7 +6,7 @@
 
 set -e
 EXP_DIR="experiments"
-CONV_DIR="converted"
+CONV_DIR="."
 
 module load conda 2>/dev/null || true
 module load R/4.1 2>/dev/null || true
