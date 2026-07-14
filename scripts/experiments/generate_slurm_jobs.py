@@ -213,6 +213,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--tool", required=True, choices=list(TOOL_CONFIG.keys()))
     parser.add_argument("--test", action="store_true", help="Generate and submit test job only")
+    parser.add_argument("--dataset", default=None, help="Specific dataset to use for test job")
     parser.add_argument("--submit", action="store_true", help="Submit all jobs")
     parser.add_argument("--dry-run", action="store_true", help="Print scripts without submitting")
     args = parser.parse_args()
@@ -231,8 +232,8 @@ def main():
     (LOG_DIR / tool).mkdir(parents=True, exist_ok=True)
 
     if args.test:
-        # Use first dataset as test
-        test_ds = datasets[0]
+        # Use specified dataset or first available
+        test_ds = args.dataset if args.dataset else datasets[0]
         script = make_slurm_script(tool, test_ds, cfg)
         script_path = slurm_dir / f"test_{test_ds}.sh"
         script_path.write_text(script)
