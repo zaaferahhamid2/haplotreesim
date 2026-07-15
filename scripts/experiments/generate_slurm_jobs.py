@@ -147,6 +147,7 @@ python3 {BASE_DIR}/{cfg['eval_script']} \\
 """
     elif tool == "CONET":
         run_cmd = f"""
+export LD_LIBRARY_PATH=/blue/lzhang.uwf/zh34.uwf/.conda/envs/CONET/lib:$LD_LIBRARY_PATH
 conda activate {cfg['conda_env']}
 python3 {BASE_DIR}/{cfg['run_script']} \\
     --input-dir {conv_input} \\
