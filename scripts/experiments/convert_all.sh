@@ -18,7 +18,7 @@ echo "Found $(echo $DATASETS | wc -w) datasets"
 
 # ── SEACON ───────────────────────────────────────────────────────────────────
 echo "=== Converting for SEACON ==="
-conda activate haplotreesim
+source /apps/conda/25.7.0/etc/profile.d/conda.sh && conda activate haplotreesim
 for DS in $DATASETS; do
     IN="$EXP_DIR/$DS"
     OUT="$CONV_DIR/SEACON/$DS"
@@ -72,7 +72,7 @@ done
 
 # ── SCICoNE ──────────────────────────────────────────────────────────────────
 echo "=== Converting for SCICoNE ==="
-conda activate haplotreesim
+source /apps/conda/25.7.0/etc/profile.d/conda.sh && conda activate haplotreesim
 for DS in $DATASETS; do
     IN="$EXP_DIR/$DS"
     OUT="$CONV_DIR/SCICoNE/$DS"
@@ -89,7 +89,7 @@ done
 
 # ── CONET ────────────────────────────────────────────────────────────────────
 echo "=== Converting for CONET ==="
-conda activate CONET
+source /apps/conda/25.7.0/etc/profile.d/conda.sh && conda activate CONET
 for DS in $DATASETS; do
     IN="$EXP_DIR/$DS"
     OUT="$CONV_DIR/CONET/$DS"
@@ -106,7 +106,7 @@ done
 
 # ── CNRein ───────────────────────────────────────────────────────────────────
 echo "=== Converting for CNRein ==="
-conda activate haplotreesim
+source /apps/conda/25.7.0/etc/profile.d/conda.sh && conda activate haplotreesim
 for DS in $DATASETS; do
     IN="$EXP_DIR/$DS"
     OUT="$CONV_DIR/CNRein/$DS"
