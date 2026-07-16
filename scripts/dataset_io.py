@@ -118,7 +118,7 @@ def load_dataset(dataset_dir: Path) -> Dict:
         path = dataset_dir / filename
         if path.exists():
             if filename.endswith(".mtx"):
-                dataset[key] = mmread(path).tocsr()
+                dataset[key] = mmread(str(path)).tocsr()
             elif filename in {"snps.tsv", "bin_snp_counts.tsv"}:
                 dataset[key] = pd.read_csv(path, sep="\t")
             else:
