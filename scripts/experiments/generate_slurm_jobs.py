@@ -31,7 +31,7 @@ TOOL_CONFIG = {
         "time": "02:00:00",
         "run_script": "scripts/run_seacon.py",
         "eval_script": "scripts/evaluate_seacon.py",
-        "run_args": "--upper-filter 20 --tolerance 0.05 --min-seg-length 10 --max-wgd 1",
+        "run_args": "--upper-filter 20 --tolerance 0.05 --max-wgd 1",
         "extra_modules": "",
     },
     "Alleloscope": {
@@ -119,14 +119,15 @@ Rscript {BASE_DIR}/scripts/evaluate_alleloscope.R \\
 conda activate {cfg['conda_env']}
 python3 {BASE_DIR}/{cfg['run_script']} \\
     --input-dir {conv_input} \\
-    --output-dir {run_output} \\
+    --output-dir {conv_input} \\
     {cfg['run_args']} \\
     --overwrite 2>&1
 
 conda activate {cfg['eval_env']}
+mkdir -p {run_output}
 python3 {BASE_DIR}/{cfg['eval_script']} \\
     --dataset-dir {EXP_DIR}/{dataset} \\
-    --seacon-output-dir {run_output} \\
+    --seacon-output-dir {conv_input} \\
     --metrics-out {metrics_out} \\
     2>&1
 """
