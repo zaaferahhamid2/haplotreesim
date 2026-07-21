@@ -51,6 +51,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def stage_inputs(input_dir: Path, output_dir: Path) -> None:
+    if input_dir.resolve() == output_dir.resolve():
+        return  # same directory, no copy needed
     require_files(input_dir, SEACON_INPUT_FILES)
     for filename in SEACON_INPUT_FILES:
         shutil.copy2(input_dir / filename, output_dir / filename)
