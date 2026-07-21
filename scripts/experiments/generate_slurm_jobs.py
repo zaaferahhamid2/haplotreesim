@@ -120,8 +120,7 @@ conda activate {cfg['conda_env']}
 python3 {BASE_DIR}/{cfg['run_script']} \\
     --input-dir {conv_input} \\
     --output-dir {conv_input} \\
-    {cfg['run_args']} \\
-    --overwrite 2>&1
+    {cfg['run_args']} 2>&1
 
 conda activate {cfg['eval_env']}
 mkdir -p {run_output}
