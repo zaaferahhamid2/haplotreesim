@@ -66,7 +66,8 @@ def main() -> None:
     input_dir = args.input_dir
     output_dir = args.output_dir
 
-    ensure_clean_dir(output_dir, overwrite=args.overwrite)
+    # For SEACON, input and output share the same directory; skip clean
+    output_dir.mkdir(parents=True, exist_ok=True)
     stage_inputs(input_dir, output_dir)
 
     # Write BAF.tsv directly from precomputed_baf.tsv (flat cell x bin format)
