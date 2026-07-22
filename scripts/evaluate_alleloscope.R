@@ -42,7 +42,7 @@ cat("  genotype_values:", nrow(gv), "cells x", ncol(gv), "columns\n")
 # Extract rho and theta per cell per region
 regions <- unique(gsub("rho_|theta_|h1_|h2_", "", colnames(gv)))
 # R converts ":" to "." in column names
-regions <- gsub("\\.", ":", regions)
+regions <- sub("\\.", ":", regions)  # only first "." is the chrom:pos separator; later periods may be decimals in sci notation
 regions <- regions[grepl(":", regions)]
 cat("  Regions:", paste(regions, collapse=", "), "\n")
 

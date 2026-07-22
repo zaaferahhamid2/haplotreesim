@@ -36,7 +36,8 @@ def main():
     sci = scicone.SCICoNE(
         str(args.scicone_build) + "/",
         str(args.output_dir) + "/",
-        verbose=True
+        verbose=True,
+        postfix=args.input_dir.name
     )
 
     # Load read counts matrix (cells x bins)
