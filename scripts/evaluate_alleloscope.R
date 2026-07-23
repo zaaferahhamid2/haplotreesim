@@ -57,7 +57,7 @@ cn_A_pred <- matrix(0L, nrow=n_cells, ncol=n_segs)
 cn_B_pred <- matrix(0L, nrow=n_cells, ncol=n_segs)
 for (si in seq_len(n_segs)) {
     seg_chrom <- as.character(segments$chrom[si])
-    region <- region_by_chrom[[seg_chrom]]
+    region <- if (seg_chrom %in% names(region_by_chrom)) region_by_chrom[[seg_chrom]] else NA  # safe lookup: chromosome may be missing entirely if it lost all SNPs during filtering/genotyping
     if (is.null(region) || is.na(region)) {
         rho_vals <- rep(1.0, n_cells)
         theta_vals <- rep(0.5, n_cells)

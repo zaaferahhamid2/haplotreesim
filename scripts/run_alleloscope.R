@@ -6,6 +6,22 @@
 library(Alleloscope)
 library(Matrix)
 
+# --- Patch: Matrix_filter's chr_nvar computation drops chromosomes that lose
+# all their SNPs during filtering (table() omits missing levels entirely),
+# causing a length mismatch in rep() during centromere/telomere position calc.
+# Fix: force one count per chromosome (0 if none survive) using explicit levels.
+mf <- Alleloscope:::Matrix_filter
+body_src <- deparse(body(mf))
+idx <- grep("chr_nvar = as.numeric\\(table\\(var_chr\\)\\)", body_src)
+if (length(idx) == 1) {
+  body_src[idx] <- "    chr_nvar = as.numeric(table(factor(var_chr, levels = sort(as.numeric(names(size))))))"
+  body(mf) <- parse(text = paste(body_src, collapse = "\n"))[[1]]
+  assignInNamespace("Matrix_filter", mf, ns = "Alleloscope")
+  cat("Patched Matrix_filter: chromosomes with 0 surviving SNPs now handled\n")
+} else {
+  cat("WARNING: Matrix_filter patch target not found (", length(idx), "matches ) - skipping patch\n")
+}
+
 args <- commandArgs(trailingOnly=TRUE)
 input_dir  <- args[which(args=="--input-dir")  + 1]
 output_dir <- args[which(args=="--output-dir") + 1]
