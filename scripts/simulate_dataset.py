@@ -74,6 +74,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--snp-density", type=float, default=0.001, help="Usable heterozygous SNP density per bp.")
     parser.add_argument("--mean-allelic-coverage", type=float, default=None, help="Mean per-SNP allelic coverage. Defaults to simulator auto-calibration.")
+    parser.add_argument("--mean-library-size", type=float, default=100.0, help="Mean read-depth coverage factor. Defaults to 100.0 (simulator baseline).")
+    parser.add_argument("--phase-switch-prob", type=float, default=0.01, help="Probability of phase switch at segment boundaries.")
+    parser.add_argument("--prob-doublet", type=float, default=0.0, help="Fraction of doublet cells.")
     parser.add_argument("--random-seed", type=int, default=42)
     return parser.parse_args()
 
@@ -139,6 +142,9 @@ def main() -> None:
         prob_arm_given_broad=args.prob_arm_given_broad,
         snp_density=args.snp_density,
         mean_allelic_coverage=args.mean_allelic_coverage,
+        mean_library_size=args.mean_library_size,
+        prob_phase_switch=args.phase_switch_prob,
+        prob_doublet=args.prob_doublet,
         random_seed=args.random_seed,
     )
 

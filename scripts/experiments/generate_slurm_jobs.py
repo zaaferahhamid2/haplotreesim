@@ -85,7 +85,7 @@ def get_datasets():
     for d in sorted(EXP_DIR.iterdir()):
         if d.is_dir() and any(d.name.startswith(p) for p in
                               ["clone_", "beta_", "events_", "cells_",
-                               "normal_", "amplitude_", "focal_"]):
+                               "normal_", "amplitude_", "focal_", "coverage_", "phaseswitch_"]):
             datasets.append(d.name)
     return datasets
 

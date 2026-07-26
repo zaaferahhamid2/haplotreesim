@@ -126,6 +126,39 @@ for SEED in "${SEEDS[@]}"; do
     done
 done
 
+echo "=== 8. Coverage (read-depth; reuse tree from clones_4_rep{seed}) ==="
+for SEED in "${SEEDS[@]}"; do
+    TREE="$BASE_DIR/clone_4_rep${SEED}/tree_structure.json"
+    for COV in 25 200; do
+        DIR="$BASE_DIR/coverage_${COV}_rep${SEED}"
+        $SIM --output-dir $DIR \
+            --whole-genome --num-clones $DEFAULT_CLONES --num-cells $DEFAULT_CELLS \
+            --lambda-events $DEFAULT_EVENTS --lambda-amplitude $DEFAULT_AMP \
+            --prob-normal $DEFAULT_NORMAL --prob-focal $DEFAULT_FOCAL \
+            --alpha-tree $DEFAULT_ALPHA --beta-tree $DEFAULT_BETA \
+            --mean-library-size $COV \
+            --tree-structure $TREE \
+            --random-seed $SEED --overwrite
+    done
+done
+
+echo "=== 9. Phase switch error rate (reuse tree from clones_4_rep{seed}) ==="
+for SEED in "${SEEDS[@]}"; do
+    TREE="$BASE_DIR/clone_4_rep${SEED}/tree_structure.json"
+    for PS in 0.001 0.05; do
+        PS_TAG=$(echo $PS | tr '.' '_')
+        DIR="$BASE_DIR/phaseswitch_${PS_TAG}_rep${SEED}"
+        $SIM --output-dir $DIR \
+            --whole-genome --num-clones $DEFAULT_CLONES --num-cells $DEFAULT_CELLS \
+            --lambda-events $DEFAULT_EVENTS --lambda-amplitude $DEFAULT_AMP \
+            --prob-normal $DEFAULT_NORMAL --prob-focal $DEFAULT_FOCAL \
+            --alpha-tree $DEFAULT_ALPHA --beta-tree $DEFAULT_BETA \
+            --phase-switch-prob $PS \
+            --tree-structure $TREE \
+            --random-seed $SEED --overwrite
+    done
+done
+
 echo ""
 echo "Done. Created $(ls $BASE_DIR | wc -l) experiment directories."
 ls $BASE_DIR
