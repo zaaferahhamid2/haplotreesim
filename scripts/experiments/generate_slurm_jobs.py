@@ -28,7 +28,7 @@ TOOL_CONFIG = {
         "eval_env": "haplotreesim",
         "cpus": 4,
         "mem": "32gb",
-        "time": "04:00:00",
+        "time": "06:00:00",
         "run_script": "scripts/run_seacon.py",
         "eval_script": "scripts/evaluate_seacon.py",
         "run_args": "--upper-filter 20 --tolerance 0.05 --max-wgd 1",
