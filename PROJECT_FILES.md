@@ -2,6 +2,53 @@
 
 Repository root: `/blue/lzhang.uwf/zh34.uwf/haplotreesim`
 
+## Quick reference (path: purpose)
+
+Script used to generate a HaploTreeSim dataset: scripts/simulate_dataset.py
+Script used to build BAF.tsv for SEACON: scripts/write_baf.py
+Script used to generate the full experiment grid (all parameter sweeps): scripts/experiments/generate_experiments.sh
+Script used to convert all datasets to every tool's input format: scripts/experiments/convert_all.sh
+Script used to generate and submit Slurm jobs: scripts/experiments/generate_slurm_jobs.py
+
+Script used to convert data to SEACON format: scripts/convert_to_seacon.py
+Script used to run SEACON: scripts/run_seacon.py
+Script used to evaluate SEACON output: scripts/evaluate_seacon.py
+
+Script used to convert data to Alleloscope format: scripts/convert_to_alleloscope.R
+Script used to run Alleloscope: scripts/run_alleloscope.R
+Script used to evaluate Alleloscope output: scripts/evaluate_alleloscope.R
+
+Script used to convert data to SCICoNE format: scripts/convert_to_scicone.py
+Script used to run SCICoNE: scripts/run_scicone.py
+Script used to evaluate SCICoNE output: scripts/evaluate_scicone.py
+
+Script used to convert data to CONET format: scripts/convert_to_conet.py
+Script used to run CONET: scripts/run_conet.py
+Script used to evaluate CONET output: scripts/evaluate_conet.py
+
+Script used to convert data to CNRein format: scripts/convert_to_cnrein.py
+Script used to run CNRein: scripts/run_cnrein.py
+Script used to evaluate CNRein output: scripts/evaluate_cnrein.py
+
+Core simulator package: src/haplotreesim/
+Main simulator class: src/haplotreesim/simulator.py
+Simulation parameters/config: src/haplotreesim/data_models.py
+Beta-splitting tree generator: src/haplotreesim/beta_tree_builder.py
+CNA event generator: src/haplotreesim/event_generator.py
+CNA event applier: src/haplotreesim/event_applier.py
+Segment boundary detector: src/haplotreesim/segment_detector.py
+Real chromosome (hg38) reference data: src/haplotreesim/chromosome_data.py
+
+Test suite: tests/
+Metrics validation tests (professor-requested sanity checks): tests/test_metrics_validation.py
+
+Aggregated runtime data for all jobs: results/runtime_summary.csv
+Aggregated accuracy metrics for all jobs: results/metrics_summary_full.csv
+
+# HaploTreeSim Project File Guide
+
+Repository root: `/blue/lzhang.uwf/zh34.uwf/haplotreesim`
+
 ## Core simulator library (`src/haplotreesim/`)
 
 | File | Description |
