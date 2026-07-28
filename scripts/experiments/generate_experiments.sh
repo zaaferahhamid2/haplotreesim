@@ -159,6 +159,23 @@ for SEED in "${SEEDS[@]}"; do
     done
 done
 
+echo "=== 10. WGD probability (reuse tree from clones_4_rep{seed}) ==="
+for SEED in "${SEEDS[@]}"; do
+    TREE="$BASE_DIR/clone_4_rep${SEED}/tree_structure.json"
+    for WGD in 0.0 0.4; do
+        WGD_TAG=$(echo $WGD | tr '.' '_')
+        DIR="$BASE_DIR/wgd_${WGD_TAG}_rep${SEED}"
+        $SIM --output-dir $DIR \
+            --whole-genome --num-clones $DEFAULT_CLONES --num-cells $DEFAULT_CELLS \
+            --lambda-events $DEFAULT_EVENTS --lambda-amplitude $DEFAULT_AMP \
+            --prob-normal $DEFAULT_NORMAL --prob-focal $DEFAULT_FOCAL \
+            --alpha-tree $DEFAULT_ALPHA --beta-tree $DEFAULT_BETA \
+            --prob-wgd $WGD \
+            --tree-structure $TREE \
+            --random-seed $SEED --overwrite
+    done
+done
+
 echo ""
 echo "Done. Created $(ls $BASE_DIR | wc -l) experiment directories."
 ls $BASE_DIR
