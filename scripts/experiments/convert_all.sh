@@ -12,7 +12,7 @@ module load conda 2>/dev/null || true
 module load R/4.1 2>/dev/null || true
 
 # Get all experiment directories
-DATASETS=$(ls $EXP_DIR | grep -E "^(clone|beta|events|cells|normal|amplitude|focal|coverage|phaseswitch|wgd)_")
+DATASETS=$(ls $EXP_DIR | grep -E "^(clone|beta|events|cells|normal|amplitude|focal|coverage|phaseswitch|wgd|doublet)_")
 
 echo "Found $(echo $DATASETS | wc -w) datasets"
 

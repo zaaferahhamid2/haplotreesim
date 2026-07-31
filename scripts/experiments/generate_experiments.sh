@@ -126,17 +126,22 @@ for SEED in "${SEEDS[@]}"; do
     done
 done
 
-echo "=== 8. Coverage (read-depth; reuse tree from clones_4_rep{seed}) ==="
+echo "=== 8. Coverage (mean_library_size + mean_allelic_coverage paired; reuse tree from clones_4_rep{seed}) ==="
+# Formula per advisor: mean_library_size = X * bin_width / read_length; mean_allelic_coverage = X
+# bin_width=500000, read_length=150 -> mean_library_size = X * 3333.33
+declare -A COV_LIBSIZE=( [0_005]=16.67 [0_02]=66.67 [0_05]=166.67 [0_1]=333.33 )
+declare -A COV_ALLELIC=( [0_005]=0.005 [0_02]=0.02 [0_05]=0.05 [0_1]=0.1 )
 for SEED in "${SEEDS[@]}"; do
     TREE="$BASE_DIR/clone_4_rep${SEED}/tree_structure.json"
-    for COV in 25 200; do
-        DIR="$BASE_DIR/coverage_${COV}_rep${SEED}"
+    for COV_TAG in 0_005 0_02 0_05 0_1; do
+        DIR="$BASE_DIR/coverage_${COV_TAG}_rep${SEED}"
         $SIM --output-dir $DIR \
             --whole-genome --num-clones $DEFAULT_CLONES --num-cells $DEFAULT_CELLS \
             --lambda-events $DEFAULT_EVENTS --lambda-amplitude $DEFAULT_AMP \
             --prob-normal $DEFAULT_NORMAL --prob-focal $DEFAULT_FOCAL \
             --alpha-tree $DEFAULT_ALPHA --beta-tree $DEFAULT_BETA \
-            --mean-library-size $COV \
+            --mean-library-size ${COV_LIBSIZE[$COV_TAG]} \
+            --mean-allelic-coverage ${COV_ALLELIC[$COV_TAG]} \
             --tree-structure $TREE \
             --random-seed $SEED --overwrite
     done
@@ -171,6 +176,23 @@ for SEED in "${SEEDS[@]}"; do
             --prob-normal $DEFAULT_NORMAL --prob-focal $DEFAULT_FOCAL \
             --alpha-tree $DEFAULT_ALPHA --beta-tree $DEFAULT_BETA \
             --prob-wgd $WGD \
+            --tree-structure $TREE \
+            --random-seed $SEED --overwrite
+    done
+done
+
+echo "=== 11. Doublet rate (reuse tree from clones_4_rep{seed}) ==="
+for SEED in "${SEEDS[@]}"; do
+    TREE="$BASE_DIR/clone_4_rep${SEED}/tree_structure.json"
+    for DBL in 0.02 0.05; do
+        DBL_TAG=$(echo $DBL | tr '.' '_')
+        DIR="$BASE_DIR/doublet_${DBL_TAG}_rep${SEED}"
+        $SIM --output-dir $DIR \
+            --whole-genome --num-clones $DEFAULT_CLONES --num-cells $DEFAULT_CELLS \
+            --lambda-events $DEFAULT_EVENTS --lambda-amplitude $DEFAULT_AMP \
+            --prob-normal $DEFAULT_NORMAL --prob-focal $DEFAULT_FOCAL \
+            --alpha-tree $DEFAULT_ALPHA --beta-tree $DEFAULT_BETA \
+            --prob-doublet $DBL \
             --tree-structure $TREE \
             --random-seed $SEED --overwrite
     done

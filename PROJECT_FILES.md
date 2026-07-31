@@ -154,3 +154,7 @@ Each of the 5 benchmarked tools (SEACON, Alleloscope, SCICoNE, CONET, CNRein) ha
 - R scripts need `module load R/4.1` before running interactively.
 - The core benchmark grid (80 datasets × 5 tools = 400 runs) follows the parameter design approved by the professor via email (num_clones=4/2/6/8, tree balance beta 0.1/0.3/0.5, lambda_events 10/40/80, cells 50/200/500, prob_normal 0/0.1/0.3, amplitude 1/2/4, focal 0.3/0.7/1.0), which differs from the illustrative grid in the manuscript's Supplementary Table S1.
 - Coverage, phase-switch, WGD, and doublet-rate experiments were added later per direct professor request; parameter values used may need reconciliation with Table S1 (see email thread).
+
+## Known Limitations
+
+- **SCICoNE tree metrics not implemented:** `scripts/evaluate_scicone.py` computes clone assignment (ARI/NMI), total-CN error (MSE), and breakpoint precision/recall/F1, but does not compute tree-topology metrics (normalized RF distance, tree coverage, cell-node match accuracy) that CONET's evaluation script does, even though both are CNA-phylogeny methods per the manuscript's Table 1. This means `nrf_distance`, `tree_coverage`, and `cell_node_match_accuracy` are `NA` for every SCICoNE row in results/master_summary.csv. Adding this would require implementing tree reconciliation logic in evaluate_scicone.py similar to evaluate_conet.py.
