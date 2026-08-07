@@ -19,6 +19,63 @@ def parse_args():
     return parser.parse_args()
 
 
+def cnrein_region_to_genomic_interval(region, bins_df):
+    """Map a CNRein global bin interval back to genomic coordinates."""
+    n_bins = len(bins_df)
+    start_bin = int(region[1])
+    end_bin = int(region[2])
+
+    if start_bin < 0 or start_bin >= n_bins:
+        raise ValueError(f"CNRein region start bin {start_bin} is outside 0..{n_bins - 1}")
+    if end_bin <= start_bin:
+        raise ValueError(f"CNRein region has non-positive length: start={start_bin}, end={end_bin}")
+
+    # CNRein regions use an exclusive end bin. Convert to the last covered bin
+    # before looking up the genomic end coordinate.
+    last_bin = min(end_bin, n_bins) - 1
+    start_row = bins_df.iloc[start_bin]
+    end_row = bins_df.iloc[last_bin]
+    if start_row["chrom"] != end_row["chrom"]:
+        raise ValueError(
+            "CNRein region crosses chromosome boundary: "
+            f"{start_row['chrom']}:{start_bin} to {end_row['chrom']}:{last_bin}"
+        )
+
+    chrom = str(start_row["chrom"]).replace("chr", "")
+    return chrom, int(start_row["start"]), int(end_row["end"])
+
+
+def write_cnrein_prediction_csv(pred, regions, bins_df, cell_names, out_file):
+    if pred.shape[1] != regions.shape[0]:
+        raise ValueError(
+            f"Prediction has {pred.shape[1]} regions, but regions.npz has {regions.shape[0]}"
+        )
+
+    region_intervals = [
+        cnrein_region_to_genomic_interval(region, bins_df)
+        for region in regions
+    ]
+
+    rows = []
+    for ci, cell_name in enumerate(cell_names):
+        for ri, (chrom, start, end) in enumerate(region_intervals):
+            h1 = int(pred[ci, ri, 0])
+            h2 = int(pred[ci, ri, 1])
+            rows.append([cell_name, chrom, start, end, h1, h2])
+
+    pd.DataFrame(
+        rows,
+        columns=[
+            "Cell barcode",
+            "Chromosome",
+            "Start",
+            "End",
+            "Haplotype 1",
+            "Haplotype 2",
+        ],
+    ).to_csv(out_file, index=False)
+
+
 def main():
     args = parse_args()
     out_dir = args.output_dir
@@ -130,24 +187,9 @@ def main():
     print(f"  initialCNA shape: {pred.shape}")
 
     # Write CSV output
-    n_regions_pred = pred.shape[1]
-    bins_per_region = n_bins // n_regions_pred
-    rows = []
-    for ci in range(n_cells):
-        for ri in range(n_regions_pred):
-            bin_start = ri * bins_per_region
-            bin_end = min((ri + 1) * bins_per_region - 1, n_bins - 1)
-            chrom = bins_df.iloc[bin_start]["chrom"].replace("chr", "")
-            start = int(bins_df.iloc[bin_start]["start"])
-            end = int(bins_df.iloc[bin_end]["end"])
-            h1 = int(pred[ci, ri, 0])
-            h2 = int(pred[ci, ri, 1])
-            rows.append([cell_names[ci], chrom, start, end, h1, h2])
-
     out_file = out_dir / "finalPrediction/CNNaivePrediction.csv"
-    pd.DataFrame(rows, columns=["Cell barcode", "Chromosome", "Start", "End",
-                                 "Haplotype 1", "Haplotype 2"]).to_csv(out_file, index=False)
-    print(f"  Wrote {out_file}: {len(rows)} rows")
+    write_cnrein_prediction_csv(pred, regions, bins_df, cell_names, out_file)
+    print(f"  Wrote {out_file}: {pred.shape[0] * pred.shape[1]} rows")
     print(f"  TCN unique: {sorted(set((pred[:,:,0]+pred[:,:,1]).flatten().tolist()))}")
     print(f"\nDone. Output in {out_dir}")
 

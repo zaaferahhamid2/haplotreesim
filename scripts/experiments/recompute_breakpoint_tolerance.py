@@ -131,6 +131,15 @@ def predicted_seacon(result_dir: Path) -> tuple[list[int], str]:
 
 
 def predicted_cnrein(result_dir: Path, bins: pd.DataFrame) -> tuple[list[int], str]:
+    regions_path = result_dir / "binScale" / "regions.npz"
+    if regions_path.exists():
+        regions = np.load(regions_path)["arr_0"]
+        if regions.size == 0:
+            return [], str(regions_path)
+        if regions.ndim != 2 or regions.shape[1] < 3:
+            raise ValueError(f"Unexpected CNRein regions shape in {regions_path}: {regions.shape}")
+        return [int(start_bin) for start_bin in regions[:, 1]], str(regions_path)
+
     pred_path = result_dir / "finalPrediction" / "CNNaivePrediction.csv"
     pred_df = pd.read_csv(pred_path)
     if pred_df.empty:

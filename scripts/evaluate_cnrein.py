@@ -28,6 +28,74 @@ def parse_args():
     return parser.parse_args()
 
 
+def cnrein_region_to_genomic_interval(region, bins_df):
+    n_bins = len(bins_df)
+    start_bin = int(region[1])
+    end_bin = int(region[2])
+
+    if start_bin < 0 or start_bin >= n_bins:
+        raise ValueError(f"CNRein region start bin {start_bin} is outside 0..{n_bins - 1}")
+    if end_bin <= start_bin:
+        raise ValueError(f"CNRein region has non-positive length: start={start_bin}, end={end_bin}")
+
+    last_bin = min(end_bin, n_bins) - 1
+    start_row = bins_df.iloc[start_bin]
+    end_row = bins_df.iloc[last_bin]
+    if start_row["chrom"] != end_row["chrom"]:
+        raise ValueError(
+            "CNRein region crosses chromosome boundary: "
+            f"{start_row['chrom']}:{start_bin} to {end_row['chrom']}:{last_bin}"
+        )
+
+    chrom = str(start_row["chrom"]).replace("chr", "")
+    return [chrom, int(start_row["start"]), int(end_row["end"])]
+
+
+def load_cnrein_predictions(cnrein_output_dir, bins_df, cells):
+    initial_cna_path = cnrein_output_dir / "binScale" / "initialCNA.npz"
+    regions_path = cnrein_output_dir / "binScale" / "regions.npz"
+    if initial_cna_path.exists() and regions_path.exists():
+        pred = np.load(initial_cna_path)["arr_0"]
+        regions = np.load(regions_path)["arr_0"]
+        if pred.ndim != 3 or pred.shape[2] < 2:
+            raise ValueError(f"Unexpected CNRein prediction shape in {initial_cna_path}: {pred.shape}")
+        if regions.ndim != 2 or regions.shape[1] < 3:
+            raise ValueError(f"Unexpected CNRein regions shape in {regions_path}: {regions.shape}")
+        if pred.shape[1] != regions.shape[0]:
+            raise ValueError(
+                f"Prediction has {pred.shape[1]} regions, but regions.npz has {regions.shape[0]}"
+            )
+        cell_list = cells["cell"].tolist()
+        if pred.shape[0] != len(cell_list):
+            raise ValueError(
+                f"Prediction has {pred.shape[0]} cells, but dataset has {len(cell_list)}"
+            )
+        region_list = np.array(
+            [cnrein_region_to_genomic_interval(region, bins_df) for region in regions],
+            dtype=object,
+        )
+        return cell_list, region_list, pred[:, :, 0], pred[:, :, 1], str(initial_cna_path)
+
+    pred_file = cnrein_output_dir / "finalPrediction/CNNaivePrediction.csv"
+    pred_df = pd.read_csv(pred_file)
+    print(f"  Predictions: {pred_df.shape}")
+
+    cell_list = pred_df["Cell barcode"].unique().tolist()
+    region_list = pred_df[pred_df["Cell barcode"] == cell_list[0]][["Chromosome","Start","End"]].values
+    n_regions = len(region_list)
+    n_pred_cells = len(cell_list)
+
+    cn_A_pred_reg = np.zeros((n_pred_cells, n_regions), dtype=int)
+    cn_B_pred_reg = np.zeros((n_pred_cells, n_regions), dtype=int)
+
+    for ci, cell in enumerate(cell_list):
+        cell_df = pred_df[pred_df["Cell barcode"] == cell]
+        cn_A_pred_reg[ci] = cell_df["Haplotype 1"].values
+        cn_B_pred_reg[ci] = cell_df["Haplotype 2"].values
+
+    return cell_list, region_list, cn_A_pred_reg, cn_B_pred_reg, str(pred_file)
+
+
 def main():
     args = parse_args()
     metrics_out = args.metrics_out or args.cnrein_output_dir / "metrics.json"
@@ -43,6 +111,10 @@ def main():
     n_segs = len(segments)
     clone_labels = cells["clone_assignment"].values
     n_bins = len(bins_df)
+    bin_chroms = bins_df["chrom"].astype(str).to_numpy()
+
+    def is_internal_breakpoint(bp):
+        return bp > 0 and bp < n_bins and bin_chroms[bp - 1] == bin_chroms[bp]
 
     # True HSCN per cell per segment
     cn_A_true = np.zeros((n_cells, n_segs), dtype=int)
@@ -53,27 +125,22 @@ def main():
         cn_B_true[ci, si] = int(row["cn_B"])
     tcn_true = cn_A_true + cn_B_true
 
-    true_bps = sorted([int(seg["start_bin"]) for _, seg in segments.iterrows() if seg["segment"] > 0])
+    true_bps = sorted(
+        int(seg["start_bin"])
+        for _, seg in segments.iterrows()
+        if seg["segment"] > 0 and is_internal_breakpoint(int(seg["start_bin"]))
+    )
 
     # Load CNRein predictions
     print("Loading CNRein output...")
-    pred_file = args.cnrein_output_dir / "finalPrediction/CNNaivePrediction.csv"
-    pred_df = pd.read_csv(pred_file)
-    print(f"  Predictions: {pred_df.shape}")
-
-    # Pivot to per-cell per-region arrays
-    cell_list = pred_df["Cell barcode"].unique().tolist()
-    region_list = pred_df[pred_df["Cell barcode"] == cell_list[0]][["Chromosome","Start","End"]].values
+    cell_list, region_list, cn_A_pred_reg, cn_B_pred_reg, prediction_source = load_cnrein_predictions(
+        args.cnrein_output_dir,
+        bins_df,
+        cells,
+    )
     n_regions = len(region_list)
     n_pred_cells = len(cell_list)
-
-    cn_A_pred_reg = np.zeros((n_pred_cells, n_regions), dtype=int)
-    cn_B_pred_reg = np.zeros((n_pred_cells, n_regions), dtype=int)
-
-    for ci, cell in enumerate(cell_list):
-        cell_df = pred_df[pred_df["Cell barcode"] == cell]
-        cn_A_pred_reg[ci] = cell_df["Haplotype 1"].values
-        cn_B_pred_reg[ci] = cell_df["Haplotype 2"].values
+    print(f"  Predictions: {n_pred_cells} cells x {n_regions} regions from {prediction_source}")
 
     # Map regions to segments
     # Build lookup: chrom, start -> bin index
@@ -84,20 +151,32 @@ def main():
     cn_A_pred = np.full((n_cells, n_segs), 1, dtype=int)
     cn_B_pred = np.full((n_cells, n_segs), 1, dtype=int)
 
+    bin_to_segment = np.full(n_bins, -1, dtype=int)
+    for si, seg_row in segments.reset_index(drop=True).iterrows():
+        start_bin = int(seg_row["start_bin"])
+        end_bin = min(int(seg_row["end_bin"]), n_bins - 1)
+        bin_to_segment[start_bin:end_bin + 1] = si
+
+    cell_to_truth_idx = {
+        str(cell): idx
+        for idx, cell in enumerate(cells["cell"].tolist())
+    }
+    pred_cell_indices = np.array(
+        [cell_to_truth_idx.get(str(cell), -1) for cell in cell_list],
+        dtype=int,
+    )
+    valid_pred_cells = pred_cell_indices >= 0
+
     for ri, (chrom, start, end) in enumerate(region_list):
         key = (str(int(chrom)), int(start))
         bin_idx = chrom_start_to_bin.get(key, None)
         if bin_idx is None:
             continue
-        for si, seg_row in segments.iterrows():
-            if int(seg_row["start_bin"]) <= bin_idx <= int(seg_row["end_bin"]):
-                for ci, cell in enumerate(cell_list):
-                    cell_idx = cells[cells["cell"] == cell].index
-                    if len(cell_idx) > 0:
-                        ci_true = cell_idx[0]
-                        cn_A_pred[ci_true, si] = cn_A_pred_reg[ci, ri]
-                        cn_B_pred[ci_true, si] = cn_B_pred_reg[ci, ri]
-                break
+        si = bin_to_segment[bin_idx]
+        if si < 0:
+            continue
+        cn_A_pred[pred_cell_indices[valid_pred_cells], si] = cn_A_pred_reg[valid_pred_cells, ri]
+        cn_B_pred[pred_cell_indices[valid_pred_cells], si] = cn_B_pred_reg[valid_pred_cells, ri]
 
     tcn_pred = cn_A_pred + cn_B_pred
 
@@ -133,14 +212,11 @@ def main():
 
     # Breakpoints from region boundaries
     pred_bps = []
-    for ri in range(1, n_regions):
-        chrom_prev = str(int(region_list[ri-1][0]))
-        chrom_curr = str(int(region_list[ri][0]))
-        if chrom_prev == chrom_curr:
-            key = (chrom_curr, int(region_list[ri][1]))
-            bin_idx = chrom_start_to_bin.get(key, None)
-            if bin_idx is not None:
-                pred_bps.append(bin_idx)
+    for chrom, start, _ in region_list:
+        key = (str(int(chrom)), int(start))
+        bin_idx = chrom_start_to_bin.get(key, None)
+        if bin_idx is not None and is_internal_breakpoint(bin_idx):
+            pred_bps.append(bin_idx)
     pred_bps = sorted(set(pred_bps))
 
     tol = args.tolerance
