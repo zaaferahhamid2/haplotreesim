@@ -305,6 +305,7 @@ def main() -> None:
 
     metrics = {
         "hscn_error": float(hscn["hscn_error"]),
+        "tcn_mse": float(hscn["tcn_mse"]),
         "loh_precision": json_metric(hscn["loh_precision"]),
         "loh_recall": json_metric(hscn["loh_recall"]),
         "loh_f1": json_metric(hscn["loh_f1"]),
@@ -345,6 +346,7 @@ def main() -> None:
     print("SEACON EVALUATION RESULTS")
     print("=" * 50)
     print(f"  HSCN Error:       {metrics['hscn_error']:.4f}  (0=perfect)")
+    print(f"  TCN MSE:          {metrics['tcn_mse']:.4f}  (0=perfect)")
     print(f"  LOH F1:           {format_metric(metrics['loh_f1'])}  (NA if no true LOH)")
     print("n_mirrored_triples:", metrics["n_mirrored_triples"])
     print(f"  MSR:              {format_metric(metrics['msr'])}  (NA if no mirrored triples)")

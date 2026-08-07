@@ -117,6 +117,7 @@ compute_scope_metrics <- function(mask) {
         return(list(
             n_cells=0L,
             hscn_error=NA,
+            tcn_mse=NA,
             loh_precision=NA,
             loh_recall=NA,
             loh_f1=NA,
@@ -139,6 +140,9 @@ compute_scope_metrics <- function(mask) {
         abs(pred_A - true_A) + abs(pred_B - true_B),
         abs(pred_A - true_B) + abs(pred_B - true_A)
     ))
+    tcn_pred <- pred_A + pred_B
+    tcn_true <- true_A + true_B
+    tcn_mse <- mean((tcn_pred - tcn_true) ^ 2)
 
     true_loh <- (pmin(true_A, true_B) == 0) & ((true_A + true_B) >= 1)
     pred_loh <- (pmin(pred_A, pred_B) == 0) & ((pred_A + pred_B) >= 1)
@@ -158,7 +162,6 @@ compute_scope_metrics <- function(mask) {
             2 * loh_precision * loh_recall / (loh_precision + loh_recall) else 0.0
     }
 
-    tcn_pred <- pred_A + pred_B
     if (requireNamespace('mclust', quietly=TRUE)) {
         if (nrow(unique(tcn_pred)) < 2) {
             pred_cluster <- rep(1L, nrow(tcn_pred))
@@ -176,6 +179,7 @@ compute_scope_metrics <- function(mask) {
     list(
         n_cells=as.integer(n_scope),
         hscn_error=hscn_err,
+        tcn_mse=tcn_mse,
         loh_precision=loh_precision,
         loh_recall=loh_recall,
         loh_f1=loh_f1,
@@ -198,6 +202,8 @@ cat(sprintf("  Retention:   %d/%d cells (%.4f)\n",
             n_cells_retained, n_cells, retention_rate))
 cat(sprintf("  All cells HSCN Error:       %.4f  (0=perfect)\n",
             all_cells_metrics$hscn_error))
+cat(sprintf("  All cells TCN MSE:          %.4f  (0=perfect)\n",
+            all_cells_metrics$tcn_mse))
 cat(sprintf("  All cells LOH F1:           %s  (true=%d pred=%d)\n",
             ifelse(is.na(all_cells_metrics$loh_f1), "NA", sprintf("%.4f", all_cells_metrics$loh_f1)),
             all_cells_metrics$loh_n_true, all_cells_metrics$loh_n_pred))
@@ -205,6 +211,8 @@ cat(sprintf("  All cells Clone ARI:        %s  (1=perfect)\n",
             ifelse(is.na(all_cells_metrics$clone_ari), "NA", sprintf("%.4f", all_cells_metrics$clone_ari))))
 cat(sprintf("  Retained cells HSCN Error:  %.4f  (0=perfect)\n",
             retained_cells_metrics$hscn_error))
+cat(sprintf("  Retained cells TCN MSE:     %.4f  (0=perfect)\n",
+            retained_cells_metrics$tcn_mse))
 cat(sprintf("  Retained cells LOH F1:      %s  (true=%d pred=%d)\n",
             ifelse(is.na(retained_cells_metrics$loh_f1), "NA", sprintf("%.4f", retained_cells_metrics$loh_f1)),
             retained_cells_metrics$loh_n_true, retained_cells_metrics$loh_n_pred))
@@ -227,6 +235,7 @@ metrics <- list(
     # Legacy top-level keys: HSCN/LOH are all-cell metrics; clone_ari keeps
     # the previous retained-cell behavior.
     hscn_error=all_cells_metrics$hscn_error,
+    tcn_mse=all_cells_metrics$tcn_mse,
     loh_precision=all_cells_metrics$loh_precision,
     loh_recall=all_cells_metrics$loh_recall,
     loh_f1=all_cells_metrics$loh_f1,
